@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"hash/fnv"
 	"io/ioutil"
 	"os"
@@ -21,18 +22,22 @@ type fsNode struct {
 
 func (f fsNode) checksum() uint64 {
 	h := fnv.New64()
-	a1 := f.size
-	a2 := int64(f.mode)
-	a3 := f.mtime.UnixNano()
-
-	// TODO(ahmetb) can be optimized by pulling all numbers into a single reused slice, or using unsafe
 	h.Write([]byte(f.name))
-	h.Write([]byte{byte(0xff & a1), byte(0xff00 & a1), byte(0xff0000 & a1), byte(0xff000000 & a1)})
-	h.Write([]byte{byte(0xff & a2), byte(0xff00 & a2), byte(0xff0000 & a2), byte(0xff000000 & a2)})
-	h.Write([]byte{byte(0xff & a3), byte(0xff00 & a3), byte(0xff0000 & a3), byte(0xff000000 & a3)})
+	a1 := uint64(f.size)
+	a2 := uint64(f.mode)
+	a3 := uint64(f.mtime.UnixNano())
+
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, a1)
+	h.Write(b)
+	binary.LittleEndian.PutUint64(b, a2)
+	h.Write(b)
+	binary.LittleEndian.PutUint64(b, a3)
+	h.Write(b)
 	for _, c := range f.nodes {
 		v := c.checksum()
-		h.Write([]byte{byte(0xff & v), byte(0xff00 & v), byte(0xff0000 & v), byte(0xff000000 & v)})
+		binary.LittleEndian.PutUint64(b, v)
+		h.Write(b)
 	}
 	return h.Sum64()
 }
