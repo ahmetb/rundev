@@ -20,17 +20,18 @@ type localRunSession struct {
 }
 
 func (s *localRunSession) start(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+	s.cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
 		"--name="+s.containerName,
 		"--env=PORT=8080",
 		fmt.Sprintf("--publish=%d:8080", s.localPort),
 		s.containerImage)
-	cmd.Stderr = &s.stderr
-	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "failed to start local docker run session")
-	}
-	s.cmd = cmd
-	return nil
+	s.cmd.Stderr = &s.stderr
+	err := s.cmd.Start()
+	return errors.Wrap(err, "failed to start local docker run session")
+}
+
+func (s *localRunSession) addr() string {
+	return fmt.Sprintf("http://localhost:%d/", s.localPort)
 }
 
 func (s *localRunSession) wait(ctx context.Context) error {
