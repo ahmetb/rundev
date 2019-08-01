@@ -16,7 +16,6 @@ type fsNode struct {
 	mode  os.FileMode
 	size  int64
 	mtime time.Time
-
 	nodes []fsNode
 }
 
@@ -24,6 +23,9 @@ func (f fsNode) checksum() uint64 {
 	h := fnv.New64()
 	h.Write([]byte(f.name))
 	a1 := uint64(f.size)
+	if f.mode.IsDir() {
+		a1 = 0 // zero size for dirs
+	}
 	a2 := uint64(f.mode)
 	a3 := uint64(f.mtime.UnixNano())
 

@@ -48,6 +48,11 @@ func main() {
 		cancel()
 	}()
 
+	rp, err := newReverseProxy(":8081", "http://localhost:8080")
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "failed to initialize local reverse proxy"))
+	}
+
 	const project = `ahmetb-samples-playground` // TODO(ahmetb) use currentProject()
 	const appName = `foo`                       // TODO(ahmetb) use basename(realpath($CWD))
 
@@ -57,15 +62,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//ro := remoteRunOpts{
-	//	dir:      *flRemoteDir,
-	//	buildCmd: *flBuildCmd,
-	//	runCmd:   *flRunCmd,
-	//}
-	//df = append(df, '\n')
-	//df = append(df, []byte(prepEntrypoint(ro))...)
-	//df = append(df, []byte("\nCMD []")...)
-	//log.Printf("Dockerfile:\n%s", string(df))
+	ro := remoteRunOpts{
+		dir:      *flRemoteDir,
+		buildCmd: *flBuildCmd,
+		runCmd:   *flRunCmd,
+	}
+	df = append(df, '\n')
+	df = append(df, []byte(prepEntrypoint(ro))...)
+	df = append(df, []byte("\nCMD []")...)
+	log.Printf("Dockerfile:\n%s", string(df))
 
 	bo := buildOpts{
 		dir:        *flLocalDir,
@@ -84,9 +89,16 @@ func main() {
 	if err := localRun.start(ctx); err != nil {
 		log.Fatal(err)
 	}
-	if err := localRun.wait(ctx); err != nil {
+	go func() {
+		if err := localRun.wait(ctx); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	if err := rp.start(ctx); err != nil {
 		log.Fatal(err)
 	}
+
 }
 
 func currentProject(ctx context.Context) (string, error) {
