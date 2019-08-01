@@ -176,6 +176,12 @@ func Test_fsDiff_directoryChangedToFile(t *testing.T) {
 	if diff := cmp.Diff(expected, got); diff != "" {
 		t.Fatalf("diff:\n%s", diff)
 	}
+
+	// switching the order shouldn't make any difference in diff ops
+	got = fsDiff(fs2, fs1)
+	if diff := cmp.Diff(expected, got); diff != "" {
+		t.Fatalf("diff:\n%s", diff)
+	}
 }
 
 func Test_fsDiff_interleaved(t *testing.T) {
