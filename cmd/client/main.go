@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -30,7 +32,7 @@ type remoteRunOpts struct {
 
 func init() {
 	flLocalDir = flag.String("local-dir", ".", "local directory to sync")
-	flAddr = flag.String("addr", ":8080", "local network address to start the local daemon")
+	flAddr = flag.String("addr", "localhost:8080", "local network address to start the local daemon")
 	flRemoteDir = flag.String("remote-dir", "", "remote directory to sync (inside the container), defaults to container's WORKDIR")
 	flBuildCmd = flag.String("build-cmd", "", "command to rebuild code (inside the container)")
 	flRunCmd = flag.String("run-cmd", "", "command to start application (inside the container)")
@@ -48,57 +50,70 @@ func main() {
 		cancel()
 	}()
 
-	rp, err := newReverseProxy(":8081", "http://localhost:8080")
-	if err != nil {
-		log.Fatal(errors.Wrap(err, "failed to initialize local reverse proxy"))
-	}
-
 	const project = `ahmetb-samples-playground` // TODO(ahmetb) use currentProject()
-	const appName = `foo`                       // TODO(ahmetb) use basename(realpath($CWD))
-
+	const appName = `foo`                       // TODO(ahmetb) use basename(realpath($CWD)
 	imageName := `gcr.io/` + project + `/` + appName
 
 	df, err := readDockerfile(*flLocalDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	ro := remoteRunOpts{
-		dir:      *flRemoteDir,
-		buildCmd: *flBuildCmd,
-		runCmd:   *flRunCmd,
-	}
-	df = append(df, '\n')
-	df = append(df, []byte(prepEntrypoint(ro))...)
-	df = append(df, []byte("\nCMD []")...)
-	log.Printf("Dockerfile:\n%s", string(df))
+	//ro := remoteRunOpts{
+	//	dir:      *flRemoteDir,
+	//	buildCmd: *flBuildCmd,
+	//	runCmd:   *flRunCmd,
+	//}
+	//df = append(df, '\n')
+	//df = append(df, []byte(prepEntrypoint(ro))...)
+	//df = append(df, []byte("\nCMD []")...)
+	//log.Printf("Dockerfile:\n%s", string(df))
 
 	bo := buildOpts{
 		dir:        *flLocalDir,
 		image:      imageName,
 		dockerfile: df}
-
+	log.Print("building docker image")
 	if err := dockerBuild(ctx, bo); err != nil {
 		log.Fatal(err)
 	}
-
 	localRun := &localRunSession{
 		containerImage: imageName,
 		containerName:  "rundev-local",
-		localPort:      5555,
-	}
+		localPort:      5555}
+	log.Print("starting local docker container")
 	if err := localRun.start(ctx); err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to start local docker container : %+v", err)
 	}
 	go func() {
 		if err := localRun.wait(ctx); err != nil {
-			log.Fatal(err)
+			log.Fatalf("local docker container terminated: %+v", err)
 		}
 	}()
 
-	if err := rp.start(ctx); err != nil {
-		log.Fatal(err)
+	localServerHandler, err := newLocalServer(localServerOpts{
+		targetAddr: "http://localhost:" + fmt.Sprintf("%d", localRun.localPort),
+		sync:       syncOpts{localDir: *flLocalDir},
+	})
+	if err != nil {
+		log.Fatalf("failed to initialize local server: %+v", err)
 	}
+	localServer := http.Server{
+		Handler: localServerHandler,
+		Addr:    *flAddr}
 
+	go func() {
+		<-ctx.Done()
+		log.Println("shutting down server")
+		localServer.Shutdown(ctx) // TODO(ahmetb) maybe use .Close?
+	}()
+	log.Printf("local server starting at %s", *flAddr)
+	if err := localServer.ListenAndServe(); err != nil {
+		if err == http.ErrServerClosed {
+			log.Printf("local server shut down gracefully, exiting")
+			os.Exit(0)
+		}
+		log.Fatalf("local server failed to start: %+v", err)
+	}
 }
 
 func currentProject(ctx context.Context) (string, error) {
