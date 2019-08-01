@@ -180,23 +180,38 @@ func Test_fsDiff_directoryChangedToFile(t *testing.T) {
 
 func Test_fsDiff_interleaved(t *testing.T) {
 	fs1 := fsNode{
-		name:  "root1",
-		mode:  os.ModeDir | os.ModePerm,
-		nodes: []fsNode{{name: "a0"}, {name: "a1"}, {name: "a3"}, {name: "a7"}}}
+		name: "root1",
+
+		mode: os.ModeDir | os.ModePerm,
+		nodes: []fsNode{
+			{
+				name:  "subdir",
+				mode:  os.ModeDir,
+				nodes: []fsNode{{name: "a0"}, {name: "a1"}, {name: "a3"}, {name: "a7"}},
+			},
+		},
+	}
 	fs2 := fsNode{
-		name:  "root1",
-		mode:  os.ModeDir | os.ModePerm,
-		nodes: []fsNode{{name: "a1"}, {name: "a2"}, {name: "a4"}, {name: "a5"}, {name: "a6"}, {name: "a8"}}}
+		name: "root1",
+		mode: os.ModeDir | os.ModePerm,
+		nodes: []fsNode{
+			{
+				name:  "subdir",
+				mode:  os.ModeDir,
+				nodes: []fsNode{{name: "a1"}, {name: "a2"}, {name: "a4"}, {name: "a5"}, {name: "a6"}, {name: "a8"}},
+			},
+		},
+	}
 
 	expected := []diffOp{
-		{diffOpAdd, "a0"},
-		{diffOpDel, "a2"},
-		{diffOpAdd, "a3"},
-		{diffOpDel, "a4"},
-		{diffOpDel, "a5"},
-		{diffOpDel, "a6"},
-		{diffOpAdd, "a7"},
-		{diffOpDel, "a8"},
+		{diffOpAdd, "subdir/a0"},
+		{diffOpDel, "subdir/a2"},
+		{diffOpAdd, "subdir/a3"},
+		{diffOpDel, "subdir/a4"},
+		{diffOpDel, "subdir/a5"},
+		{diffOpDel, "subdir/a6"},
+		{diffOpAdd, "subdir/a7"},
+		{diffOpDel, "subdir/a8"},
 	}
 	got := fsDiff(fs1, fs2)
 	if diff := cmp.Diff(expected, got); diff != "" {
@@ -204,7 +219,6 @@ func Test_fsDiff_interleaved(t *testing.T) {
 	}
 }
 
-// TODO(ahmetb) implement
 func Test_fsDiff(t *testing.T) {
 	// (fs1)			(fs2)
 	//
