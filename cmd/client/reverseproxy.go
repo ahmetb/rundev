@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
@@ -27,7 +27,7 @@ func withSyncingRoundTripper(next http.RoundTripper, sync *syncer) http.RoundTri
 		maxRetries: 10}
 }
 
-func (s *syncingRoundTripper) RoundTrip(origReq *http.Request) (*http.Response, error) {
+func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// TODO buffer the request
 	// TODO attempt round tripping request
 	// TODO compute local checksum, add as header
@@ -35,20 +35,21 @@ func (s *syncingRoundTripper) RoundTrip(origReq *http.Request) (*http.Response, 
 	if err != nil {
 		return nil, err
 	}
-	origReq.Header.Set(HdrRundevChecksum, fmt.Sprintf("%d", localChecksum))
+	req.Header.Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", localChecksum))
 
 	// save request for repeating
-	var b bytes.Buffer
-	if err := origReq.Write(&b); err != nil {
-		return nil, errors.Wrap(err, "failed to buffer request")
-	}
-
-	for retry := 0; retry < s.maxRetries; retry++ {
-		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b.Bytes()))) // probably can be simplified
+	var body []byte
+	if req.Body != nil {
+		body, err = ioutil.ReadAll(req.Body)
+		defer req.Body.Close()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to un-buffer request")
+			return nil, errors.Wrap(err, "failed to buffer request body")
 		}
-		req.URL = origReq.URL
+	}
+	for retry := 0; retry < s.maxRetries; retry++ {
+		if body != nil {
+			req.Body = ioutil.NopCloser(bytes.NewReader(body))
+		}
 
 		// round-trip the request
 		resp, err := s.next.RoundTrip(req)
@@ -57,10 +58,10 @@ func (s *syncingRoundTripper) RoundTrip(origReq *http.Request) (*http.Response, 
 		}
 		ct := resp.Header.Get("content-type")
 		switch ct {
-		case MimeChecksumMismatch:
-			log.Printf("[reverse proxy] remote responded with checksum mismatch")
-		case MimeDumbRepeat:
+		case constants.MimeDumbRepeat:
 			log.Printf("[reverse proxy] remote responded with dumb-repeat")
+		case constants.MimeChecksumMismatch:
+			log.Printf("[reverse proxy] remote responded with checksum mismatch")
 		default:
 			log.Printf("[reverse proxy] request completed on retry=%d", retry)
 			return resp, nil
