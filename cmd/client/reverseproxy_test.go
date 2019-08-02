@@ -10,7 +10,7 @@ import (
 func TestReverseProxy_transmitsChecksum(t *testing.T) {
 	visits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		v := req.Header.Get(hdrRundevChecksum)
+		v := req.Header.Get(HdrRundevChecksum)
 		if v == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, "empty checksum header")
@@ -50,7 +50,7 @@ func TestReverseProxy_repeatsRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		i++
 		if i <= 2 {
-			w.Header().Set("content-type", mimeDumbRepeat)
+			w.Header().Set("content-type", MimeDumbRepeat)
 			return
 		}
 		fmt.Fprintf(w, "done")

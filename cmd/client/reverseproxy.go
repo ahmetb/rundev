@@ -35,7 +35,7 @@ func (s *syncingRoundTripper) RoundTrip(origReq *http.Request) (*http.Response, 
 	if err != nil {
 		return nil, err
 	}
-	origReq.Header.Set(hdrRundevChecksum, fmt.Sprintf("%d", localChecksum))
+	origReq.Header.Set(HdrRundevChecksum, fmt.Sprintf("%d", localChecksum))
 
 	// save request for repeating
 	var b bytes.Buffer
@@ -57,9 +57,9 @@ func (s *syncingRoundTripper) RoundTrip(origReq *http.Request) (*http.Response, 
 		}
 		ct := resp.Header.Get("content-type")
 		switch ct {
-		case mimeChecksumMismatch:
+		case MimeChecksumMismatch:
 			log.Printf("[reverse proxy] remote responded with checksum mismatch")
-		case mimeDumbRepeat:
+		case MimeDumbRepeat:
 			log.Printf("[reverse proxy] remote responded with dumb-repeat")
 		default:
 			log.Printf("[reverse proxy] request completed on retry=%d", retry)

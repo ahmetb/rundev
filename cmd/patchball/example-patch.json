@@ -1,0 +1,18 @@
+[
+  {
+    "Type": 0,
+    "Path": "app.py"
+  },
+  {
+    "Type": 1,
+    "Path": "LICENSE"
+  },
+  {
+    "Type": 0,
+    "Path": "nest1/emptydir"
+  },
+  {
+    "Type": 0,
+    "Path": "nest1/nest2"
+  }
+]

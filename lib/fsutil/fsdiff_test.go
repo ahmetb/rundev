@@ -42,8 +42,8 @@ func Test_fsDiff_leftSideEmpty(t *testing.T) {
 		Nodes: []FSNode{{Name: "a.txt"}, {Name: "b.txt"}}}
 
 	expected := []DiffOp{
-		{diffOpDel, "a.txt"},
-		{diffOpDel, "b.txt"},
+		{DiffOpDel, "a.txt"},
+		{DiffOpDel, "b.txt"},
 	}
 	got := FSDiff(fs1, fs2)
 	if diff := cmp.Diff(expected, got); diff != "" {
@@ -101,7 +101,7 @@ func Test_fsDiff_fileAddDelete(t *testing.T) {
 
 	expected := []DiffOp{
 		{DiffOpAdd, "a.txt"},
-		{diffOpDel, "c.txt"},
+		{DiffOpDel, "c.txt"},
 	}
 	got := FSDiff(fs1, fs2)
 	if diff := cmp.Diff(expected, got); diff != "" {
@@ -135,7 +135,7 @@ func Test_fsDiff_subDirectory(t *testing.T) {
 	}
 
 	expected = []DiffOp{
-		{diffOpDel, "subdir"},
+		{DiffOpDel, "subdir"},
 	}
 	got = FSDiff(fs2, fs1)
 	if diff := cmp.Diff(expected, got); diff != "" {
@@ -168,7 +168,7 @@ func Test_fsDiff_directoryChangedToFile(t *testing.T) {
 	}
 
 	expected := []DiffOp{
-		{diffOpDel, "subdir"},
+		{DiffOpDel, "subdir"},
 		{DiffOpAdd, "subdir"},
 	}
 
@@ -211,13 +211,13 @@ func Test_fsDiff_interleaved(t *testing.T) {
 
 	expected := []DiffOp{
 		{DiffOpAdd, "subdir/a0"},
-		{diffOpDel, "subdir/a2"},
+		{DiffOpDel, "subdir/a2"},
 		{DiffOpAdd, "subdir/a3"},
-		{diffOpDel, "subdir/a4"},
-		{diffOpDel, "subdir/a5"},
-		{diffOpDel, "subdir/a6"},
+		{DiffOpDel, "subdir/a4"},
+		{DiffOpDel, "subdir/a5"},
+		{DiffOpDel, "subdir/a6"},
 		{DiffOpAdd, "subdir/a7"},
-		{diffOpDel, "subdir/a8"},
+		{DiffOpDel, "subdir/a8"},
 	}
 	got := FSDiff(fs1, fs2)
 	if diff := cmp.Diff(expected, got); diff != "" {
@@ -278,10 +278,10 @@ func Test_fsDiff(t *testing.T) {
 	expected := []DiffOp{
 		{DiffOpAdd, "e1/e1c1"},
 		{DiffOpAdd, "e1/e1c2"},
-		{diffOpDel, "e1/e1c3"},
-		{diffOpDel, "e2"},
+		{DiffOpDel, "e1/e1c3"},
+		{DiffOpDel, "e2"},
 		{DiffOpAdd, "e3"},
-		{diffOpDel, "e5"},
+		{DiffOpDel, "e5"},
 	}
 	got := FSDiff(fs1, fs2)
 	if diff := cmp.Diff(expected, got); diff != "" {
