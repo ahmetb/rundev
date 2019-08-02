@@ -14,6 +14,19 @@ type DiffOp struct {
 	Path string
 }
 
+func (o DiffOp) String() string {
+	var s string
+	switch o.Type {
+	case DiffOpAdd:
+		s = "A"
+	case DiffOpDel:
+		s = "D"
+	default:
+		s = "?"
+	}
+	return s + " " + o.Path
+}
+
 // FSDiff returns the operations that needs to be done on n2 to make it look like n1
 func FSDiff(n1, n2 FSNode) []DiffOp {
 	return fsDiffInner(n1, n2, ".")

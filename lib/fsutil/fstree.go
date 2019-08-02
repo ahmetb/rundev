@@ -2,6 +2,7 @@ package fsutil
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
 	"io/ioutil"
 	"os"
@@ -17,6 +18,11 @@ type FSNode struct {
 	Size  int64
 	Mtime time.Time
 	Nodes []FSNode
+}
+
+func (f FSNode) String() string {
+	return "(" + f.Mode.String() + ") " +
+		f.Name + " (" + fmt.Sprintf("%d", len(f.Nodes)) + ") nodes"
 }
 
 func (f FSNode) Checksum() uint64 {
