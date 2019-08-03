@@ -84,7 +84,7 @@ func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
 				out = append(out, archiveFile{
 					fullPath:    fullPath,
 					extractPath: op.Path,
-					stat:        fi,
+					stat:        nanosecMaskingStat{fi},
 				})
 			} else {
 				// directories must be traversed recursively

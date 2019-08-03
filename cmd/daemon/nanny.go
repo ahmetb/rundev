@@ -4,6 +4,7 @@ import (
 	"github.com/pkg/errors"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 )
 
@@ -16,16 +17,22 @@ type nanny interface {
 type procNanny struct {
 	cmd  string
 	args []string
+	opts procOpts
 
 	mu     sync.RWMutex
 	proc   *os.Process
 	active bool
 }
 
-func newProcessNanny(cmd string, args []string) nanny {
+type procOpts struct {
+	port int
+}
+
+func newProcessNanny(cmd string, args []string, opts procOpts) nanny {
 	return &procNanny{
 		cmd:  cmd,
-		args: args}
+		args: args,
+		opts: opts}
 }
 
 func (p *procNanny) Running() bool {
@@ -58,6 +65,9 @@ func (p *procNanny) replace() error {
 	p.kill()
 
 	newProc := exec.Command(p.cmd, p.args...)
+	if p.opts.port > 0 {
+		newProc.Env = append(os.Environ(), "PORT="+strconv.Itoa(p.opts.port))
+	}
 	if err := newProc.Start(); err != nil {
 		return errors.Wrap(err, "error starting process")
 	}

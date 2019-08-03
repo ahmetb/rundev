@@ -28,9 +28,6 @@ func withSyncingRoundTripper(next http.RoundTripper, sync *syncer) http.RoundTri
 }
 
 func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// TODO buffer the request
-	// TODO attempt round tripping request
-	// TODO compute local checksum, add as header
 	localChecksum, err := s.sync.checksum()
 	if err != nil {
 		return nil, err
@@ -54,22 +51,30 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		// round-trip the request
 		resp, err := s.next.RoundTrip(req)
 		if err != nil {
-			return resp, err
+			return nil, err // TODO(ahmetb) returning err from roundtrip method is not surfacing the error message in the response body, and prints a log to stderr by net/http's internal logger
 		}
+		// TODO check response (checksum mismatch?, build error?, run error?)
 		ct := resp.Header.Get("content-type")
 		switch ct {
 		case constants.MimeDumbRepeat:
 			log.Printf("[reverse proxy] remote responded with dumb-repeat")
 		case constants.MimeChecksumMismatch:
-			log.Printf("[reverse proxy] remote responded with checksum mismatch")
+			remoteSum := resp.Header.Get(constants.HdrRundevChecksum)
+			log.Printf("[reverse proxy] remote responded with checksum mismatch (%s)", remoteSum)
+			remoteFS, err := parseMismatchResponse(resp.Body)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to read remote fs in the response") // TODO mkErrorResp here
+			}
+			if err := s.sync.applyPatch(remoteFS, remoteSum); err != nil {
+				log.Printf("[retry %d] sync was failed: %+v", retry, err)
+				continue
+			}
 		default:
-			log.Printf("[reverse proxy] request completed on retry=%d", retry)
+			log.Printf("[reverse proxy] request completed on retry=%d path=%s", retry, req.URL.Path)
 			return resp, nil
 		}
 	}
-	// TODO check response (checksum mismatch?, build error?, run error?)
-	// TODO handle checksum mismatch
-	// TODO compute diff, create patch payload
+
 	return &http.Response{
 		StatusCode: http.StatusInternalServerError,
 		Body:       ioutil.NopCloser(strings.NewReader(fmt.Sprintf("max retries exceeded (%d) syncing code", s.maxRetries))),

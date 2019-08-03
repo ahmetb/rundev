@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	flRunCmd   string
-	flBuildCmd string
-	flAddr     string
-	flSyncDir  string
+	flRunCmd    string
+	flBuildCmd  string
+	flAddr      string
+	flSyncDir   string
+	flChildPort int
 )
 
 func init() {
@@ -22,6 +23,7 @@ func init() {
 	flag.StringVar(&flAddr, "addr", "localhost:8080", "network address to start the daemon") // TODO(ahmetb): make this obey $PORT
 	flag.StringVar(&flBuildCmd, "build-cmd", "", "command to rebuild the user app (inside the container)")
 	flag.StringVar(&flRunCmd, "run-cmd", "", "command to start the user app (inside the container)")
+	flag.IntVar(&flChildPort, "user-port", 8081, "PORT value passed to the user app")
 	flag.Parse()
 }
 
@@ -45,6 +47,9 @@ func main() {
 	if flRunCmd == "" {
 		log.Fatal("-run-cmd is empty")
 	}
+	if flChildPort <= 0 || flChildPort > 65535 {
+		log.Fatalf("-user-port value (%d) is invalid", flChildPort)
+	}
 	runCmds, err := shlex.Split(flRunCmd)
 	if err != nil {
 		log.Fatalf("failed to parse -run-cmd: %s", err)
@@ -54,8 +59,9 @@ func main() {
 	runCmd, runCmdArgs := runCmds[0], runCmds[1:]
 
 	handler := newDaemonServer(daemonOpts{
-		syncDir: flSyncDir,
-		runCmd:  cmd{runCmd, runCmdArgs},
+		syncDir:   flSyncDir,
+		runCmd:    cmd{runCmd, runCmdArgs},
+		childPort: flChildPort,
 	})
 
 	localServer := http.Server{

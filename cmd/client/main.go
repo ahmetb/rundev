@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -50,14 +49,14 @@ func main() {
 		cancel()
 	}()
 
-	const project = `ahmetb-samples-playground` // TODO(ahmetb) use currentProject()
-	const appName = `foo`                       // TODO(ahmetb) use basename(realpath($CWD)
-	imageName := `gcr.io/` + project + `/` + appName
-
-	df, err := readDockerfile(*flLocalDir)
-	if err != nil {
-		log.Fatal(err)
-	}
+	//const project = `ahmetb-samples-playground` // TODO(ahmetb) use currentProject()
+	//const appName = `foo`                       // TODO(ahmetb) use basename(realpath($CWD)
+	//imageName := `gcr.io/` + project + `/` + appName
+	//
+	//df, err := readDockerfile(*flLocalDir)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 	//ro := remoteRunOpts{
 	//	dir:      *flRemoteDir,
 	//	buildCmd: *flBuildCmd,
@@ -68,31 +67,36 @@ func main() {
 	//df = append(df, []byte("\nCMD []")...)
 	//log.Printf("Dockerfile:\n%s", string(df))
 
-	bo := buildOpts{
-		dir:        *flLocalDir,
-		image:      imageName,
-		dockerfile: df}
-	log.Print("building docker image")
-	if err := dockerBuild(ctx, bo); err != nil {
-		log.Fatal(err)
-	}
-	localRun := &localRunSession{
-		containerImage: imageName,
-		containerName:  "rundev-local",
-		localPort:      5555}
-	log.Print("starting local docker container")
-	if err := localRun.start(ctx); err != nil {
-		log.Fatalf("failed to start local docker container : %+v", err)
-	}
-	go func() {
-		if err := localRun.wait(ctx); err != nil {
-			log.Fatalf("local docker container terminated: %+v", err)
-		}
-	}()
+	//bo := buildOpts{
+	//	dir:        *flLocalDir,
+	//	image:      imageName,
+	//	dockerfile: df}
+	//log.Print("building docker image")
+	//if err := dockerBuild(ctx, bo); err != nil {
+	//	log.Fatal(err)
+	//}
+	//localRun := &localRunSession{
+	//	containerImage: imageName,
+	//	containerName:  "rundev-local",
+	//	localPort:      5555}
+	//log.Print("starting local docker container")
+	//if err := localRun.start(ctx); err != nil {
+	//	log.Fatalf("failed to start local docker container : %+v", err)
+	//}
+	//go func() {
+	//	if err := localRun.wait(ctx); err != nil {
+	//		log.Fatalf("local docker container terminated: %+v", err)
+	//	}
+	//}()
 
+	backend := "http://localhost:8888"
+	sync := newSyncer(syncOpts{
+		localDir:   *flLocalDir,
+		targetAddr: backend,
+	})
 	localServerHandler, err := newLocalServer(localServerOpts{
-		targetAddr: "http://localhost:" + fmt.Sprintf("%d", localRun.localPort),
-		sync:       syncOpts{localDir: *flLocalDir},
+		proxyTarget: backend,
+		sync:        sync,
 	})
 	if err != nil {
 		log.Fatalf("failed to initialize local server: %+v", err)

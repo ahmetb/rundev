@@ -13,11 +13,11 @@ import (
 )
 
 type FSNode struct {
-	Name  string
-	Mode  os.FileMode
-	Size  int64
-	Mtime time.Time
-	Nodes []FSNode
+	Name  string      `json:"name"`
+	Mode  os.FileMode `json:"mode"`
+	Size  int64       `json:"size,omitempty"`
+	Mtime time.Time   `json:"mtime"`
+	Nodes []FSNode    `json:"nodes,omitempty"`
 }
 
 func (f FSNode) String() string {
@@ -29,9 +29,6 @@ func (f FSNode) Checksum() uint64 {
 	h := fnv.New64()
 	h.Write([]byte(f.Name))
 	a1 := uint64(f.Size)
-	if f.Mode.IsDir() {
-		a1 = 0 // zero Size for dirs
-	}
 	a2 := uint64(f.Mode)
 	a3 := uint64(f.Mtime.UnixNano())
 
@@ -60,6 +57,7 @@ func Walk(dir string) (FSNode, error) {
 	}
 
 	n, err := walkFile(dir, fi)
+	n.Name = "$root" // value doesn't matter, but should be consistent on local vs remote
 	return n, errors.Wrap(err, "failed to traverse directory tree")
 }
 
@@ -68,11 +66,13 @@ func walkFile(path string, fi os.FileInfo) (FSNode, error) {
 		Name:  fi.Name(),
 		Mode:  fi.Mode(),
 		Size:  fi.Size(),
-		Mtime: fi.ModTime(),
+		Mtime: fi.ModTime().Truncate(time.Second), // tarballs don't support nsecs in time spec
 	}
 	if !fi.IsDir() {
 		return n, nil
 	}
+	n.Size = 0                // zero size for dirs
+	n.Mtime = time.Unix(0, 0) // zero time for dirs
 
 	children, err := ioutil.ReadDir(path)
 	if err != nil {
