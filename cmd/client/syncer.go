@@ -51,6 +51,7 @@ func (s *syncer) applyPatch(remoteFS fsutil.FSNode, currentRemoteChecksum string
 	if err != nil {
 		return errors.Wrap(err, "failed to create patch requeset")
 	}
+	req.Header.Set("content-type", constants.MimePatch)
 	req.Header.Set(constants.HdrRundevPatchPreconditionSum, currentRemoteChecksum)
 	req.Header.Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", localChecksum))
 	resp, err := http.DefaultClient.Do(req)

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"github.com/ahmetb/rundev/lib/fsutil"
 	"io"
 	"io/ioutil"
@@ -29,6 +30,9 @@ func main() {
 		log.Fatal("-dir is empty")
 	}
 	var ops []fsutil.DiffOp
+	for _, op := range ops {
+		fmt.Fprintf(os.Stderr, "%v\n", op)
+	}
 	b, err := ioutil.ReadFile(flOps)
 	if err != nil {
 		log.Fatalf("failed to open file: %+v", err)

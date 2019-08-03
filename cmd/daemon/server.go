@@ -102,6 +102,10 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if ct := req.Header.Get("content-type"); ct != constants.MimePatch {
+		w.WriteHeader(http.StatusUnsupportedMediaType)
+		return
+	}
 
 	incomingChecksum := req.Header.Get(constants.HdrRundevChecksum)
 	if incomingChecksum == "" {

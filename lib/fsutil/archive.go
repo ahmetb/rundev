@@ -128,11 +128,8 @@ func expandDirEntries(dir string) ([]fileEntry, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read dir %s", dir)
 	}
-	if len(ls) == 0 {
-		fn := dir + constants.WhiteoutPlaceholderSuffix
-		out = append(out, fileEntry{fn, whiteoutStat{name: filepath.Base(dir), sys: stat.Sys()}})
-		return out, nil
-	}
+
+	out = append(out, fileEntry{dir, zeroSizeStat{stat}}) // add self (dir entry)
 	for _, fi := range ls {
 		fp := filepath.Join(dir, fi.Name())
 		if !fi.IsDir() {

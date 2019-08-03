@@ -9,10 +9,6 @@
   },
   {
     "Type": 0,
-    "Path": "nest1/emptydir"
-  },
-  {
-    "Type": 0,
-    "Path": "nest1/nest2"
+    "Path": "nest1"
   }
 ]

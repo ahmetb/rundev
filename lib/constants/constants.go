@@ -8,6 +8,5 @@ const (
 	MimeChecksumMismatch = `application/vnd.rundev.checksumMismatch+json`
 	MimePatch            = `application/vnd.rundev.patch+tar`
 
-	WhiteoutDeleteSuffix      = ".whiteout.del"
-	WhiteoutPlaceholderSuffix = ".whiteout.ph"
+	WhiteoutDeleteSuffix = ".whiteout.del"
 )
