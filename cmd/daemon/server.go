@@ -124,34 +124,6 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	srv.reverseProxy.ServeHTTP(w, req)
 }
 
-func (srv *daemonServer) ensureChildProcessHandler(next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		log.Printf("[reverse proxy] path=%s method=%s", req.URL.Path, req.Method)
-
-		srv.nannyLock.Lock()
-		if !srv.procNanny.Running() {
-			log.Printf("[reverse proxy] user process not running, restarting")
-			if err := srv.procNanny.Restart(); err != nil {
-				// TODO return structured response for errors
-				writeProcError(w, fmt.Sprintf("failed to start child process: %+v", err), srv.procLogs.Bytes())
-				srv.nannyLock.Unlock()
-				return
-			}
-		}
-		srv.nannyLock.Unlock()
-
-		// wait for port to open
-		ctx, cancel := context.WithTimeout(req.Context(), srv.opts.portWaitTimeout)
-		defer cancel()
-		if err := srv.portCheck.waitPort(ctx); err != nil {
-			writeProcError(w, fmt.Sprintf("child process did not start listening on $PORT in %v", srv.opts.portWaitTimeout), srv.procLogs.Bytes())
-			return
-		}
-
-		next.ServeHTTP(w, req)
-	}
-}
-
 func (srv *daemonServer) restart(w http.ResponseWriter, req *http.Request) {
 	if err := srv.procNanny.Restart(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

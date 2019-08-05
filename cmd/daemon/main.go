@@ -21,11 +21,15 @@ var (
 )
 
 func init() {
+	listenAddr := "localhost:8080"
+	if p := os.Getenv("PORT"); p != "" {
+		listenAddr = ":" + p
+	}
 	flag.StringVar(&flSyncDir, "sync-dir", ".", "directory to sync")
-	flag.StringVar(&flAddr, "addr", "localhost:8080", "network address to start the daemon") // TODO(ahmetb): make this obey $PORT
+	flag.StringVar(&flAddr, "addr", listenAddr, "network address to start the daemon") // TODO(ahmetb): make this obey $PORT
 	flag.StringVar(&flBuildCmd, "build-cmd", "", "command to rebuild the user app (inside the container)")
 	flag.StringVar(&flRunCmd, "run-cmd", "", "command to start the user app (inside the container)")
-	flag.IntVar(&flChildPort, "user-port", 5000, "PORT value passed to the user app")
+	flag.IntVar(&flChildPort, "user-port", 5555, "PORT environment variable passed to the user app")
 	flag.DurationVar(&flProcessListenTimeout, "process-listen-timeout", time.Second*4, "time to wait for user app to listen on PORT")
 	flag.Parse()
 }
