@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"github.com/pkg/errors"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -28,13 +30,15 @@ type procNanny struct {
 type procOpts struct {
 	port int
 	dir  string
+	logs *bytes.Buffer
 }
 
 func newProcessNanny(cmd string, args []string, opts procOpts) nanny {
 	return &procNanny{
 		cmd:  cmd,
 		args: args,
-		opts: opts}
+		opts: opts,
+	}
 }
 
 func (p *procNanny) Running() bool {
@@ -62,6 +66,7 @@ func (p *procNanny) kill() {
 		p.proc.Release()
 	}
 	p.active = false
+	p.opts.logs.Reset()
 }
 
 func (p *procNanny) replace() error {
@@ -71,8 +76,8 @@ func (p *procNanny) replace() error {
 	if p.opts.dir != "" {
 		newProc.Dir = p.opts.dir
 	}
-	newProc.Stderr = os.Stderr
-	newProc.Stdout = os.Stdout
+	newProc.Stdout = io.MultiWriter(p.opts.logs, os.Stdout)
+	newProc.Stderr = io.MultiWriter(p.opts.logs, os.Stderr)
 
 	if p.opts.port > 0 {
 		newProc.Env = append(os.Environ(), "PORT="+strconv.Itoa(p.opts.port))

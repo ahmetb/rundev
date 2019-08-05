@@ -31,9 +31,9 @@ type remoteRunOpts struct {
 
 func init() {
 	flLocalDir = flag.String("local-dir", ".", "local directory to sync")
-	flAddr = flag.String("addr", "localhost:8080", "local network address to start the local daemon")
 	flRemoteDir = flag.String("remote-dir", "", "remote directory to sync (inside the container), defaults to container's WORKDIR")
-	flBuildCmd = flag.String("build-cmd", "", "command to rebuild code (inside the container)")
+	flAddr = flag.String("addr", "localhost:8080", "network address to start the local proxy server")
+	flBuildCmd = flag.String("build-cmd", "", "command to re-build code (inside the container)")
 	flRunCmd = flag.String("run-cmd", "", "command to start application (inside the container)")
 	flag.Parse()
 }

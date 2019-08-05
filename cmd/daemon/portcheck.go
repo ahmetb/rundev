@@ -44,6 +44,7 @@ func (t *tcpPortCheck) checkPort() bool {
 
 // waitPort waits for port to be connectable until the specified ctx is cancelled.
 func (t *tcpPortCheck) waitPort(ctx context.Context) error {
+	// TODO: do we need to return error from this method?
 	ch := make(chan struct{}, 1)
 	defer close(ch)
 

@@ -7,6 +7,7 @@ const (
 	MimeDumbRepeat       = `application/vnd.rundev.repeat`
 	MimeChecksumMismatch = `application/vnd.rundev.checksumMismatch+json`
 	MimePatch            = `application/vnd.rundev.patch+tar`
+	MimeProcessError     = `application/vnd.rundev.procError+json`
 
 	WhiteoutDeleteSuffix = ".whiteout.del"
 )

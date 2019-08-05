@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/pkg/errors"
@@ -53,9 +54,22 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		if err != nil {
 			return nil, err // TODO(ahmetb) returning err from roundtrip method is not surfacing the error message in the response body, and prints a log to stderr by net/http's internal logger
 		}
-		// TODO check response (checksum mismatch?, build error?, run error?)
 		ct := resp.Header.Get("content-type")
 		switch ct {
+		case constants.MimeProcessError:
+			log.Printf("[reverse proxy] remote responded with process error")
+			var pe constants.ProcError
+			if err := json.NewDecoder(resp.Body).Decode(&pe); err != nil {
+				if resp.Body != nil {
+					resp.Body.Close()
+				}
+				return nil, errors.Wrap(err, "failed to parse proc error response body") // TODO ahmetb mkErrorResp here
+			}
+			resp.Body.Close()
+			return &http.Response{
+				StatusCode: resp.StatusCode,
+				Body:       ioutil.NopCloser(strings.NewReader(fmt.Sprintf("process error: %s\n\noutput:\n%s", pe.Message, pe.Output))),
+			}, nil
 		case constants.MimeDumbRepeat:
 			log.Printf("[reverse proxy] remote responded with dumb-repeat")
 		case constants.MimeChecksumMismatch:
@@ -70,7 +84,7 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 				continue
 			}
 		default:
-			log.Printf("[reverse proxy] request completed on retry=%d path=%s", retry, req.URL.Path)
+			log.Printf("[reverse proxy] request completed on retry=%d path=%s (%s)", retry, req.URL.Path, resp.Header.Get("content-type"))
 			return resp, nil
 		}
 	}
