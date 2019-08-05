@@ -32,8 +32,9 @@ func (s *syncer) checksum() (uint64, error) {
 	return fs.Checksum(), nil
 }
 
-// uploadPatch creates and uploads a patch to remote endpoint to be applied if it's currently at the given checksum.
-func (s *syncer) applyPatch(remoteFS fsutil.FSNode, currentRemoteChecksum string) error {
+// uploadPatch creates and uploads a patch to remote endpoint to be
+// applied if it's currently at the given checksum.
+func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum string) error {
 	localFS, err := fsutil.Walk(s.opts.localDir)
 	if err != nil {
 		return errors.Wrapf(err, "failed to walk local fs dir %s", s.opts.localDir)
@@ -47,17 +48,18 @@ func (s *syncer) applyPatch(remoteFS fsutil.FSNode, currentRemoteChecksum string
 		log.Printf("  %s", v)
 	}
 
-	tar, err := fsutil.PatchArchive(s.opts.localDir, diff)
+	tar, n, err := fsutil.PatchArchive(s.opts.localDir, diff)
 	if err != nil {
 		return err
 	}
+	log.Printf("diff tarball %d bytes", n)
 
 	url := s.opts.targetAddr + "/rundevd/patch"
 	req, err := http.NewRequest(http.MethodPatch, url, tar)
 	if err != nil {
 		return errors.Wrap(err, "failed to create patch requeset")
 	}
-	req.Header.Set("content-type", constants.MimePatch)
+	req.Header.Set("Content-Type", constants.MimePatch)
 	req.Header.Set(constants.HdrRundevPatchPreconditionSum, currentRemoteChecksum)
 	req.Header.Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", localChecksum))
 	resp, err := http.DefaultClient.Do(req)

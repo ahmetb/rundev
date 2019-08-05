@@ -11,25 +11,27 @@ import (
 	"path/filepath"
 )
 
-// PatchArchive creates a tarball for given operations in baseDir.
-func PatchArchive(baseDir string, ops []DiffOp) (io.Reader, error) {
+// PatchArchive creates a tarball for given operations in baseDir and returns its size.
+func PatchArchive(baseDir string, ops []DiffOp) (io.Reader, int, error) {
 	var b bytes.Buffer
-	tw := tar.NewWriter(&b)
+	cw := new(countWriter)
+	w := io.MultiWriter(&b, cw)
+	tw := tar.NewWriter(w)
 
 	files, err := normalizeFiles(baseDir, ops)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to normalize file list")
+		return nil, -1, errors.Wrap(err, "failed to normalize file list")
 	}
 
 	for _, v := range files {
 		if err := addFile(tw, v); err != nil {
-			return nil, errors.Wrap(err, "tar failure")
+			return nil, -1, errors.Wrap(err, "tar failure")
 		}
 	}
 	if err := tw.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to finalize tarball")
+		return nil, -1, errors.Wrap(err, "failed to finalize tarball")
 	}
-	return &b, nil
+	return &b, cw.n, nil
 }
 
 func addFile(tw *tar.Writer, file archiveFile) error {
@@ -70,6 +72,7 @@ func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
 	for _, op := range ops {
 		fullPath := filepath.Join(baseDir, filepath.FromSlash(op.Path))
 		if op.Type == DiffOpDel {
+			// create a whiteout file
 			out = append(out, archiveFile{
 				fullPath:    fullPath,
 				extractPath: op.Path + constants.WhiteoutDeleteSuffix,
@@ -101,7 +104,7 @@ func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
 					out = append(out, archiveFile{
 						fullPath:    f.fullPath,
 						extractPath: extractPath,
-						stat:        f.stat,
+						stat:        nanosecMaskingStat{f.stat},
 					})
 				}
 			}
@@ -112,15 +115,14 @@ func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
 	return out, nil
 }
 
-type fileEntry struct {
+type tarEntry struct {
 	fullPath string
 	stat     os.FileInfo
 }
 
-// walkDir lists all the files recursively in dir and
-// returns whiteout file entries for empty directories.
-func expandDirEntries(dir string) ([]fileEntry, error) {
-	var out []fileEntry
+// walkDir walks dir recursively to list directory end file entries in sorted order.
+func expandDirEntries(dir string) ([]tarEntry, error) {
+	var out []tarEntry
 	stat, err := os.Stat(dir)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read info for dir %s", dir)
@@ -130,11 +132,13 @@ func expandDirEntries(dir string) ([]fileEntry, error) {
 		return nil, errors.Wrapf(err, "failed to read dir %s", dir)
 	}
 
-	out = append(out, fileEntry{dir, zeroSizeStat{stat}}) // add self (dir entry)
+	// add self (dir entry)
+	out = append(out, tarEntry{dir, zeroSizeStat{stat}})
+	// add child entries
 	for _, fi := range ls {
 		fp := filepath.Join(dir, fi.Name())
 		if !fi.IsDir() {
-			v := fileEntry{fp, fi}
+			v := tarEntry{fp, fi}
 			out = append(out, v)
 		} else {
 			entries, err := expandDirEntries(fp)
@@ -145,4 +149,11 @@ func expandDirEntries(dir string) ([]fileEntry, error) {
 		}
 	}
 	return out, nil
+}
+
+type countWriter struct{ n int }
+
+func (c *countWriter) Write(p []byte) (n int, err error) {
+	c.n += len(p)
+	return len(p), err
 }

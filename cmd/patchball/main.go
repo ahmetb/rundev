@@ -41,7 +41,7 @@ func main() {
 		log.Fatalf("unmarshal error")
 	}
 
-	tar, err := fsutil.PatchArchive(flDir, ops)
+	tar, _, err := fsutil.PatchArchive(flDir, ops)
 	if err != nil {
 		log.Fatalf("error creating patch archive: %+v", err)
 	}

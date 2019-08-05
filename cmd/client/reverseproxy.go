@@ -65,7 +65,7 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to read remote fs in the response") // TODO mkErrorResp here
 			}
-			if err := s.sync.applyPatch(remoteFS, remoteSum); err != nil {
+			if err := s.sync.uploadPatch(remoteFS, remoteSum); err != nil {
 				log.Printf("[retry %d] sync was failed: %+v", retry, err)
 				continue
 			}

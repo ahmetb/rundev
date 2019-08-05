@@ -4,11 +4,19 @@
     "Path": "app.py"
   },
   {
-    "Type": 1,
+    "Type": 0,
     "Path": "LICENSE"
   },
   {
     "Type": 0,
+    "Path": "foo"
+  },
+  {
+    "Type": 0,
     "Path": "nest1"
+  },
+  {
+    "Type": 0,
+    "Path": "now-dir"
   }
 ]
