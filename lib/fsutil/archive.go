@@ -69,17 +69,18 @@ func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
 	var out []archiveFile
 	for _, op := range ops {
 		fullPath := filepath.Join(baseDir, filepath.FromSlash(op.Path))
-		fi, err := os.Stat(fullPath)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to stat file %s for tar-ing", fullPath)
-		}
 		if op.Type == DiffOpDel {
 			out = append(out, archiveFile{
 				fullPath:    fullPath,
 				extractPath: op.Path + constants.WhiteoutDeleteSuffix,
-				stat:        whiteoutStat{name: filepath.Base(fullPath), sys: fi.Sys()},
+				stat:        whiteoutStat{name: filepath.Base(fullPath)},
 			})
 		} else if op.Type == DiffOpAdd {
+			fi, err := os.Stat(fullPath)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to stat file %s for tar-ing", fullPath)
+			}
+
 			if !fi.IsDir() {
 				out = append(out, archiveFile{
 					fullPath:    fullPath,

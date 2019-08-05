@@ -7,6 +7,7 @@ import (
 	"github.com/ahmetb/rundev/lib/fsutil"
 	"github.com/pkg/errors"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -39,7 +40,12 @@ func (s *syncer) applyPatch(remoteFS fsutil.FSNode, currentRemoteChecksum string
 	}
 	localChecksum := localFS.Checksum()
 
+	log.Printf("checksum mismatch local=%d remote=%s", localChecksum, currentRemoteChecksum)
 	diff := fsutil.FSDiff(localFS, remoteFS)
+	log.Printf("diff operations (%d)", len(diff))
+	for _, v := range diff {
+		log.Printf("  %s", v)
+	}
 
 	tar, err := fsutil.PatchArchive(s.opts.localDir, diff)
 	if err != nil {

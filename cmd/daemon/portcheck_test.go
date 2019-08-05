@@ -9,7 +9,7 @@ import (
 )
 
 func Test_checkPortOpen(t *testing.T) {
-	ok := newTCPPortChecker().checkPort(9999)
+	ok := newTCPPortChecker(9999).checkPort()
 	if ok {
 		t.Fatal("port should not be detected as open")
 	}
@@ -20,7 +20,7 @@ func Test_checkPortOpen(t *testing.T) {
 	}
 	defer li.Close()
 
-	ok = newTCPPortChecker().checkPort(56771)
+	ok = newTCPPortChecker(56771).checkPort()
 	if !ok {
 		t.Fatal("port should be detected as open")
 	}
@@ -29,7 +29,7 @@ func Test_checkPortOpen(t *testing.T) {
 func Test_waitPort(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
-	err := newTCPPortChecker().waitPort(ctx, 9999)
+	err := newTCPPortChecker(9999).waitPort(ctx)
 	if err == nil {
 		t.Fatal("should've gotten a context cancellation error")
 	}
@@ -46,7 +46,7 @@ func Test_waitPort(t *testing.T) {
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel2()
-	err = newTCPPortChecker().waitPort(ctx2, 56771)
+	err = newTCPPortChecker(56771).waitPort(ctx2)
 	if err != nil {
 		t.Fatalf("got error from open port: %v", err)
 	}

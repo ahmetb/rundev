@@ -9,28 +9,30 @@ import (
 )
 
 const (
-	defaultPortRetryInterval = time.Millisecond * 10
-	defaultPortDialTimeout   = time.Millisecond * 20
+	defaultPortRetryInterval = time.Millisecond * 5
+	defaultPortDialTimeout   = time.Millisecond * 40
 )
 
 type portChecker interface {
-	checkPort(port int) bool
-	waitPort(ctx context.Context, port int) error
+	checkPort() bool
+	waitPort(ctx context.Context) error
 }
 
 type tcpPortCheck struct {
+	portNum       int
 	retryInterval time.Duration
 	dialTimeout   time.Duration
 }
 
-func newTCPPortChecker() portChecker {
+func newTCPPortChecker(port int) portChecker {
 	return &tcpPortCheck{
+		portNum:       port,
 		retryInterval: defaultPortRetryInterval,
 		dialTimeout:   defaultPortDialTimeout}
 }
 
-func (t *tcpPortCheck) checkPort(port int) bool {
-	addr := net.JoinHostPort("localhost", fmt.Sprintf("%d", port))
+func (t *tcpPortCheck) checkPort() bool {
+	addr := net.JoinHostPort("localhost", fmt.Sprintf("%d", t.portNum))
 	conn, err := net.DialTimeout("tcp", addr, t.dialTimeout)
 	defer func() {
 		if conn != nil {
@@ -41,7 +43,7 @@ func (t *tcpPortCheck) checkPort(port int) bool {
 }
 
 // waitPort waits for port to be connectable until the specified ctx is cancelled.
-func (t *tcpPortCheck) waitPort(ctx context.Context, port int) error {
+func (t *tcpPortCheck) waitPort(ctx context.Context) error {
 	ch := make(chan struct{}, 1)
 	defer close(ch)
 
@@ -54,7 +56,7 @@ func (t *tcpPortCheck) waitPort(ctx context.Context, port int) error {
 			case <-ctx.Done():
 				return
 			case <-tick.C:
-				if ok := t.checkPort(port); ok {
+				if ok := t.checkPort(); ok {
 					ch <- struct{}{}
 					return
 				}

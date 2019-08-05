@@ -7,7 +7,7 @@ import (
 )
 
 func TestExecFails(t *testing.T) {
-	n := newProcessNanny("non-existing", nil)
+	n := newProcessNanny("non-existing", nil, procOpts{})
 	err := n.Restart()
 	defer n.Kill()
 	if err == nil {
@@ -19,7 +19,7 @@ func TestExecFails(t *testing.T) {
 }
 
 func TestExec(t *testing.T) {
-	n := newProcessNanny("sleep", []string{"100"})
+	n := newProcessNanny("sleep", []string{"100"}, procOpts{})
 	defer n.Kill()
 	if n.Running() {
 		t.Fatal("not started yet")
@@ -39,7 +39,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestExecReplaceRunning(t *testing.T) {
-	n := newProcessNanny("sleep", []string{"1000"})
+	n := newProcessNanny("sleep", []string{"1000"}, procOpts{})
 	defer n.Kill()
 	if err := n.Restart(); err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestExecReplaceRunning(t *testing.T) {
 }
 
 func TestExecCapturesExit(t *testing.T) {
-	n := newProcessNanny("sleep", []string{"0.1"})
+	n := newProcessNanny("sleep", []string{"0.1"}, procOpts{})
 	defer n.Kill()
 
 	if err := n.Restart(); err != nil {

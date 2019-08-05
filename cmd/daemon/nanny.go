@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/pkg/errors"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -26,6 +27,7 @@ type procNanny struct {
 
 type procOpts struct {
 	port int
+	dir  string
 }
 
 func newProcessNanny(cmd string, args []string, opts procOpts) nanny {
@@ -55,6 +57,7 @@ func (p *procNanny) kill() {
 	defer p.mu.Unlock()
 
 	if p.proc != nil {
+		log.Printf("proc kill")
 		p.proc.Kill()
 		p.proc.Release()
 	}
@@ -65,9 +68,16 @@ func (p *procNanny) replace() error {
 	p.kill()
 
 	newProc := exec.Command(p.cmd, p.args...)
+	if p.opts.dir != "" {
+		newProc.Dir = p.opts.dir
+	}
+	newProc.Stderr = os.Stderr
+	newProc.Stdout = os.Stdout
+
 	if p.opts.port > 0 {
 		newProc.Env = append(os.Environ(), "PORT="+strconv.Itoa(p.opts.port))
 	}
+	log.Printf("proc start")
 	if err := newProc.Start(); err != nil {
 		return errors.Wrap(err, "error starting process")
 	}

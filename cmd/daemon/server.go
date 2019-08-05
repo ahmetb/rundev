@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type cmd struct {
@@ -18,24 +20,31 @@ type cmd struct {
 }
 
 type daemonOpts struct {
-	syncDir   string
-	runCmd    cmd
-	buildCmd  cmd
-	childPort int
+	syncDir         string
+	runCmd          cmd
+	buildCmd        cmd
+	childPort       int
+	portWaitTimeout time.Duration
 }
 
 type daemonServer struct {
 	opts daemonOpts
 
 	patchLock sync.Mutex
-	child     nanny
+
+	portCheck portChecker
+	nannyLock sync.Mutex
+	procNanny nanny
 }
 
 func newDaemonServer(opts daemonOpts) http.Handler {
 	r := &daemonServer{
-		opts: opts,
-		child: newProcessNanny(opts.runCmd.cmd, opts.runCmd.args, procOpts{
-			port: opts.childPort}),
+		opts:      opts,
+		portCheck: newTCPPortChecker(opts.childPort),
+		procNanny: newProcessNanny(opts.runCmd.cmd, opts.runCmd.args, procOpts{
+			port: opts.childPort,
+			dir:  opts.syncDir,
+		}),
 	}
 	rp := newReverseProxy(
 		&url.URL{
@@ -50,13 +59,43 @@ func newDaemonServer(opts daemonOpts) http.Handler {
 	mux.HandleFunc("/rundevd/restart", r.restart)
 	mux.HandleFunc("/rundevd/patch", r.patch)
 	mux.HandleFunc("/rundevd/", r.unsupported) // prevent proxying daemon debug endpoints to user app
-	// TODO(ahmetb) add /rundevd/upload
-	mux.Handle("/", rp)
+	mux.HandleFunc("/", r.ensureChildProcessHandler(rp))
 	return mux
 }
 
+func (srv *daemonServer) ensureChildProcessHandler(next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		log.Printf("[reverse proxy] path=%s method=%s", req.URL.Path, req.Method)
+
+		srv.nannyLock.Lock()
+		if !srv.procNanny.Running() {
+			log.Printf("[reverse proxy] user process not running, restarting")
+			if err := srv.procNanny.Restart(); err != nil {
+				// TODO return structured response for errors
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "failed to start child process. output:\n%v", err) // actually get output
+				srv.nannyLock.Unlock()
+				return
+			}
+		}
+		srv.nannyLock.Unlock()
+
+		// wait for port to open
+		ctx, cancel := context.WithTimeout(req.Context(), srv.opts.portWaitTimeout)
+		defer cancel()
+		if err := srv.portCheck.waitPort(ctx); err != nil {
+			// TODO return structured response for errors
+			w.WriteHeader(http.StatusBadGateway)
+			fmt.Fprintf(w, "child process did not start listening on $PORT in %v", srv.opts.portWaitTimeout)
+			return
+		}
+
+		next.ServeHTTP(w, req)
+	}
+}
+
 func (srv *daemonServer) restart(w http.ResponseWriter, req *http.Request) {
-	if err := srv.child.Restart(); err != nil {
+	if err := srv.procNanny.Restart(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "error restarting process: %+v", err)
 		return
@@ -85,7 +124,7 @@ func (srv *daemonServer) debugHandler(w http.ResponseWriter, req *http.Request) 
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", fs.Checksum())
-	fmt.Fprintf(w, "child process running: %v\n", srv.child.Running())
+	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
 	fmt.Fprintf(w, "opts: %#v\n", srv.opts)
 }
 
@@ -97,6 +136,7 @@ func (*daemonServer) unsupported(w http.ResponseWriter, req *http.Request) {
 func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 	srv.patchLock.Lock()
 	defer srv.patchLock.Unlock()
+	// TODO would be good to stop accepting new requests during this period
 
 	if req.Method != http.MethodPatch {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -136,7 +176,6 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set(constants.HdrRundevChecksum, localChecksum)
 		return
 	}
-	// would be good to stop serving all requests during this period also
 
 	defer req.Body.Close()
 	if err := fsutil.ApplyPatch(srv.opts.syncDir, req.Body); err != nil {
@@ -144,6 +183,12 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "failed to uncompress patch tar: %+v", err)
 		return
 	}
+
 	w.WriteHeader(http.StatusAccepted)
+
+	log.Printf("patch (%s) accepted", incomingChecksum)
+	srv.nannyLock.Lock()
+	srv.procNanny.Restart()
+	srv.nannyLock.Unlock()
 	return
 }
