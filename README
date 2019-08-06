@@ -1,0 +1,38 @@
+rundev
+======
+
+Installation:
+
+	go build -o ./rundevd ./cmd/daemon
+	go build -o ./rundev  ./cmd/client
+
+Integrate to your app:
+
+- Build rundevd like described above.
+- Add it to your container image's current working directory. (./rundevd)
+
+Start developing:
+
+	rundev -local-dir ~/workspace/py-hello \
+	  -run-cmd "python app.py"
+
+This command will:
+
+  1. in-memory overwrite your Dockerfile to run ./rundevd
+  2. build and push a container image to your project
+  2. deploy your app to Cloud Run
+  3. start a local HTTP server on localhost:8080 for development.
+
+Every time you make a request to this address:
+  - local file system will be synced (if necessary) to containers on Cloud Run
+  - your app will be rebuilt and restarted (if necessary)
+  - your query will be proxied to Cloud Run container instances.
+
+In the command above:
+  -local-dir contains path to source code on your machine.
+  -run-cmd specifies entrypoint to your application
+  -build-cmd (optional) is the command to rebuild your application
+  -remote-dir specifies the directory inside the container to sync files to
+  -addr specifies an alternative address to listen on
+
+
