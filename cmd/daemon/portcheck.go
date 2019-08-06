@@ -15,7 +15,7 @@ const (
 
 type portChecker interface {
 	checkPort() bool
-	waitPort(ctx context.Context) error
+	waitPort(context.Context) error
 }
 
 type tcpPortCheck struct {
