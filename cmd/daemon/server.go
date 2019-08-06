@@ -117,7 +117,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	ctx, cancel := context.WithTimeout(req.Context(), srv.opts.portWaitTimeout)
 	defer cancel()
 	if err := srv.portCheck.waitPort(ctx); err != nil {
-		writeProcError(w, fmt.Sprintf("child process did not start listening on $PORT in %v", srv.opts.portWaitTimeout), srv.procLogs.Bytes())
+		writeProcError(w, fmt.Sprintf("child process did not start listening on $PORT (%d) in %v", srv.opts.childPort, srv.opts.portWaitTimeout), srv.procLogs.Bytes())
 		return
 	}
 

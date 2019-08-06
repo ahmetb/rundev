@@ -16,15 +16,16 @@ import (
 )
 
 var (
-	flLocalDir  *string
-	flRemoteDir *string
-	flAddr      *string
-	flBuildCmd  *string
-	flRunCmd    *string
+	flLocalDir   *string
+	flRemoteDir  *string
+	flAddr       *string
+	flBuildCmd   *string
+	flRunCmd     *string
+	flNoCloudRun *bool
 )
 
 type remoteRunOpts struct {
-	dir      string
+	syncDir  string
 	buildCmd string
 	runCmd   string
 }
@@ -35,6 +36,7 @@ func init() {
 	flAddr = flag.String("addr", "localhost:8080", "network address to start the local proxy server")
 	flBuildCmd = flag.String("build-cmd", "", "command to re-build code (inside the container)")
 	flRunCmd = flag.String("run-cmd", "", "command to start application (inside the container)")
+	flNoCloudRun = flag.Bool("no-cloudrun", false, "do not deploy to Cloud Run (you should start rundevd on localhost:8888)")
 	flag.Parse()
 }
 
@@ -48,54 +50,58 @@ func main() {
 		log.Printf("termination signal received: %s", sig)
 		cancel()
 	}()
+	if *flRunCmd == "" {
+		log.Fatalf("-run-cmd not specified")
+	}
 
-	//const project = `ahmetb-samples-playground` // TODO(ahmetb) use currentProject()
-	//const appName = `foo`                       // TODO(ahmetb) use basename(realpath($CWD)
-	//imageName := `gcr.io/` + project + `/` + appName
-	//
-	//df, err := readDockerfile(*flLocalDir)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//ro := remoteRunOpts{
-	//	dir:      *flRemoteDir,
-	//	buildCmd: *flBuildCmd,
-	//	runCmd:   *flRunCmd,
-	//}
-	//df = append(df, '\n')
-	//df = append(df, []byte(prepEntrypoint(ro))...)
-	//df = append(df, []byte("\nCMD []")...)
-	//log.Printf("Dockerfile:\n%s", string(df))
+	var rundevdURL string
+	if *flNoCloudRun {
+		rundevdURL = "http://localhost:8888"
+		log.Printf("not deploying to Cloud Run. make sure to start rundevd at %s", rundevdURL)
+	} else {
+		log.Printf("starting one-time build & push & deploy")
+		const appName = `rundev-app` // TODO(ahmetb) use basename(realpath($CWD)
+		project, err := currentProject(ctx)
+		if err != nil {
+			log.Fatalf("error reading current project ID from gcloud: %+v", err)
+		}
+		imageName := `gcr.io/` + project + `/` + appName
 
-	//bo := buildOpts{
-	//	dir:        *flLocalDir,
-	//	image:      imageName,
-	//	dockerfile: df}
-	//log.Print("building docker image")
-	//if err := dockerBuild(ctx, bo); err != nil {
-	//	log.Fatal(err)
-	//}
-	//localRun := &localRunSession{
-	//	containerImage: imageName,
-	//	containerName:  "rundev-local",
-	//	localPort:      5555}
-	//log.Print("starting local docker container")
-	//if err := localRun.start(ctx); err != nil {
-	//	log.Fatalf("failed to start local docker container : %+v", err)
-	//}
-	//go func() {
-	//	if err := localRun.wait(ctx); err != nil {
-	//		log.Fatalf("local docker container terminated: %+v", err)
-	//	}
-	//}()
+		df, err := readDockerfile(*flLocalDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		ro := remoteRunOpts{
+			syncDir:  *flRemoteDir,
+			buildCmd: *flBuildCmd,
+			runCmd:   *flRunCmd,
+		}
+		df = append(df, '\n')
+		df = append(df, []byte(prepEntrypoint(ro))...)
+		df = append(df, []byte("\nCMD []")...)
+		bo := buildOpts{
+			dir:        *flLocalDir,
+			image:      imageName,
+			dockerfile: df}
+		log.Print("building docker image")
+		if err := dockerBuildPush(ctx, bo); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("built and pushed docker image: %s", imageName)
 
-	backend := "http://localhost:8888"
+		log.Print("deploying to Cloud Run")
+		appURL, err := deployCloudRun(ctx, appName, project, imageName)
+		if err != nil {
+			log.Fatalf("error deploying to Cloud Run: %+v", err)
+		}
+		rundevdURL = appURL
+	}
 	sync := newSyncer(syncOpts{
 		localDir:   *flLocalDir,
-		targetAddr: backend,
+		targetAddr: rundevdURL,
 	})
 	localServerHandler, err := newLocalServer(localServerOpts{
-		proxyTarget: backend,
+		proxyTarget: rundevdURL,
 		sync:        sync,
 	})
 	if err != nil {
@@ -110,7 +116,7 @@ func main() {
 		log.Println("shutting down server")
 		localServer.Shutdown(ctx) // TODO(ahmetb) maybe use .Close?
 	}()
-	log.Printf("local server starting at %s", *flAddr)
+	log.Printf("local proxy server starting at %s (proxying to %s)", *flAddr, rundevdURL)
 	if err := localServer.ListenAndServe(); err != nil {
 		if err == http.ErrServerClosed {
 			log.Printf("local server shut down gracefully, exiting")
@@ -118,6 +124,32 @@ func main() {
 		}
 		log.Fatalf("local server failed to start: %+v", err)
 	}
+}
+
+func deployCloudRun(ctx context.Context, appName, project, image string) (string, error) {
+	b, err := exec.CommandContext(ctx, "gcloud",
+		"beta", "run", "deploy", "-q", appName,
+		"--image="+image,
+		"--allow-unauthenticated",
+		"--project="+project,
+		"--platform=managed",
+		"--region=us-central1").CombinedOutput()
+	if err != nil {
+		return "", errors.Wrapf(err, "cloud run deployment failed. output:\n%s", string(b))
+	}
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "gcloud", "beta",
+		"run", "services", "describe", "-q", appName,
+		"--project="+project,
+		"--region=us-central1",
+		"--platform=managed",
+		"--format=get(status.url)")
+	cmd.Stderr = &stderr
+	b, err = cmd.Output()
+	if err != nil {
+		return "", errors.Wrapf(err, "cloud run describe failed. stderr:\n%s", string(stderr.Bytes()))
+	}
+	return strings.TrimSpace(string(b)), nil
 }
 
 func currentProject(ctx context.Context) (string, error) {

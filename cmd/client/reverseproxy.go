@@ -16,16 +16,18 @@ type syncingRoundTripper struct {
 	sync       *syncer
 	next       http.RoundTripper
 	maxRetries int
+	hostHdr    string
 }
 
-func withSyncingRoundTripper(next http.RoundTripper, sync *syncer) http.RoundTripper {
+func withSyncingRoundTripper(next http.RoundTripper, sync *syncer, host string) http.RoundTripper {
 	if next == nil {
 		next = http.DefaultTransport
 	}
 	return &syncingRoundTripper{
 		next:       next,
 		sync:       sync,
-		maxRetries: 10}
+		maxRetries: 10,
+		hostHdr:    host}
 }
 
 func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -48,6 +50,8 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		if body != nil {
 			req.Body = ioutil.NopCloser(bytes.NewReader(body))
 		}
+		req.Host = s.hostHdr
+		req.Header.Set("Host", s.hostHdr)
 
 		// round-trip the request
 		resp, err := s.next.RoundTrip(req)

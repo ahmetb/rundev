@@ -19,7 +19,7 @@ type buildOpts struct {
 	dockerfile []byte
 }
 
-func dockerBuild(ctx context.Context, opts buildOpts) error {
+func dockerBuildPush(ctx context.Context, opts buildOpts) error {
 	b, err := exec.CommandContext(ctx, "docker", "version").CombinedOutput()
 	if err != nil {
 		errors.Wrapf(err, "local docker engine is unreachable, output=%s", string(b))
@@ -34,6 +34,10 @@ func dockerBuild(ctx context.Context, opts buildOpts) error {
 		cmd.Stdin = bytes.NewReader(opts.dockerfile)
 	}
 	b, err = cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "building docker image failed, output=%s", string(b))
+	}
+	b, err = exec.CommandContext(ctx, "docker", "push", opts.image).CombinedOutput()
 	return errors.Wrapf(err, "building docker image failed, output=%s", string(b))
 }
 
@@ -49,14 +53,15 @@ func readDockerfile(dir string) ([]byte, error) {
 }
 
 func prepEntrypoint(opts remoteRunOpts) string {
-	cmd := []string{"/rundevd",
+	cmd := []string{"./rundevd",
 		"-addr=:8080",
-		"-dir=" + opts.dir,
 		"-run-cmd", opts.runCmd}
 	if opts.buildCmd != "" {
 		cmd = append(cmd, "-build-cmd", opts.buildCmd)
 	}
-
+	if opts.syncDir != "" {
+		cmd = append(cmd, "-sync-dir="+opts.syncDir)
+	}
 	sw := new(strings.Builder)
 	sw.WriteString("ENTRYPOINT [")
 	for i, a := range cmd {

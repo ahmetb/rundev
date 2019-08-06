@@ -45,7 +45,7 @@ func newReverseProxyHandler(addr string, sync *syncer) (http.Handler, error) {
 		return nil, errors.Wrapf(err, "failed to parse remote addr as url %s", addr)
 	}
 	rp := httputil.NewSingleHostReverseProxy(u)
-	rp.Transport = withSyncingRoundTripper(rp.Transport, sync)
+	rp.Transport = withSyncingRoundTripper(rp.Transport, sync, u.Host)
 	return rp, nil
 }
 
