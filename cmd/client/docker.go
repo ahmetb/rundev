@@ -26,7 +26,7 @@ func dockerBuildPush(ctx context.Context, opts buildOpts) error {
 	}
 	args := []string{"build", "--tag=" + opts.image, opts.dir}
 	if len(opts.dockerfile) > 0 {
-		args = append(args, "--file=/dev/stdin")
+		args = append(args, "--file=-")
 	}
 	cmd := exec.CommandContext(ctx,
 		"docker", args...)

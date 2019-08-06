@@ -6,7 +6,7 @@ Installation
 ------------
 You need to check out the source code and build using Go:
 
-	GOOS=linux GOARCH=amd64 go build -o ./rundevd ./cmd/daemon
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./rundevd ./cmd/daemon
 	go build -o ./rundev ./cmd/client
 
 Integrate to your app
