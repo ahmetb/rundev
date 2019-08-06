@@ -1,20 +1,26 @@
 rundev
 ======
+Sub-second inner-loop iterations for containers running on Google Cloud Run.
 
-Installation:
+Installation
+------------
+You need to check out the source code and build using Go:
 
 	go build -o ./rundevd ./cmd/daemon
 	go build -o ./rundev  ./cmd/client
 
-Integrate to your app:
+Integrate to your app
+---------------------
 
-- Build rundevd like described above.
-- Add it to your container image's current working directory. (./rundevd)
+Add rundev to your container image's current working directory.
+(In the future, this step should go away.)
 
-Start developing:
+Start developing
+---------------
 
+Run:
 	rundev -local-dir ~/workspace/py-hello \
-	  -run-cmd "python app.py"
+	    -run-cmd "python app.py"
 
 This command will:
 
