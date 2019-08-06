@@ -42,3 +42,12 @@ In the command above:
   -addr specifies an alternative address to listen on
 
 
+Debug endpoints
+---------------
+
+/rundev/debugz : debug data for rundev client
+/rundev/fsz    : local fs tree
+/rundevd/fsz   : remote fs tree
+/rundevd/debugz  : debug data for rundevd daemon
+/rundevd/procz   : logs of current process
+/rundevd/restart : restart the command
