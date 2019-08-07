@@ -81,7 +81,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("failed to parse entrypoint/cmd from dockerfile. try specifying -run-cmd? error: %+v", err)
 			}
-			log.Printf("parsed entrypoint as %s", runCmd)
+			log.Printf("[info] parsed entrypoint as %s", runCmd)
 		} else {
 			v, err := shlex.Split(*flRunCmd)
 			if err != nil {
@@ -91,14 +91,14 @@ func main() {
 		}
 
 		if *flBuildCmd == "" {
-			log.Fatal("-build-cmd not specified: if you have steps to build your code after syncing, use this flag")
+			log.Printf("[info] -build-cmd not specified: if you have steps to build your code after syncing, use this flag")
 		} else {
 			v, err := shlex.Split(*flBuildCmd)
 			if err != nil {
 				log.Fatalf("failed to parse -build-cmd into commands and args: %+v", err)
 			}
 			buildCmd = cmd{v[0], v[1:]}
-			log.Printf("parsed -build-cmd as: %s", buildCmd)
+			log.Printf("[info] parsed -build-cmd as: %s", buildCmd)
 		}
 
 		ro := remoteRunOpts{
