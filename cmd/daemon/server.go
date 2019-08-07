@@ -106,6 +106,19 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	srv.nannyLock.Lock()
 	if !srv.procNanny.Running() {
 		log.Printf("[reverse proxy] user process not running, restarting")
+		if srv.opts.buildCmd != nil {
+			log.Printf("[reverse proxy] building: %v", srv.opts.buildCmd)
+			bc := exec.Command(srv.opts.buildCmd.cmd, srv.opts.buildCmd.args...)
+			bc.Dir = srv.opts.syncDir
+			if b, err := bc.CombinedOutput(); err != nil {
+				srv.nannyLock.Unlock()
+				writeProcError(w, fmt.Sprintf("executing -build-cmd failed: %+v", err), b) // TODO(ahmetb) client of this endpoint is not able to handle MIME type for procError
+				log.Printf("builded fail: %s", string(b))
+				return
+			}
+			log.Print("rebuild succeeded")
+		}
+
 		if err := srv.procNanny.Restart(); err != nil {
 			// TODO return structured response for errors
 			writeProcError(w, fmt.Sprintf("failed to start child process: %+v", err), srv.procLogs.Bytes())
@@ -225,23 +238,8 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if srv.opts.buildCmd != nil {
-		log.Printf("rebuilding: %v", srv.opts.buildCmd)
-		bc := exec.Command(srv.opts.buildCmd.cmd, srv.opts.buildCmd.args...)
-		bc.Dir = srv.opts.syncDir
-		if b, err := bc.CombinedOutput(); err != nil {
-			writeProcError(w, fmt.Sprintf("rebuild command failed: %+v", err), b) // TODO(ahmetb) client of this endpoint is not able to handle MIME type for procError
-			log.Printf("build fail: %s", string(b))
-			// TODO(ahmetb) build error is not making to the user!!!
-			return
-		}
-		log.Printf("build cmd succeeded: %v", srv.opts.buildCmd)
-	}
-
 	srv.nannyLock.Lock()
-	if err := srv.procNanny.Restart(); err != nil {
-		writeProcError(w, fmt.Sprintf("failed to restart subprocess after patching: %+v", err), srv.procLogs.Bytes())
-	}
+	srv.procNanny.Kill() // restart the process on next proxied request
 	srv.nannyLock.Unlock()
 
 	w.WriteHeader(http.StatusAccepted)
