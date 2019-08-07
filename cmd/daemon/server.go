@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/ahmetb/rundev/lib/fsutil"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"io"
 	"log"
@@ -139,6 +140,7 @@ func (srv *daemonServer) fsHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
+		return
 	}
 	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%v", fs.RootChecksum()))
 	enc := json.NewEncoder(w)
@@ -163,7 +165,7 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
 	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
-	fmt.Fprintf(w, "opts: %#v\n", srv.opts)
+	fmt.Fprintf(w, "opts: %# v\n", pretty.Formatter(srv.opts))
 }
 
 func (*daemonServer) unsupported(w http.ResponseWriter, req *http.Request) {
@@ -202,6 +204,7 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
+		return
 	}
 	localChecksum := fmt.Sprintf("%d", fs.RootChecksum())
 	if localChecksum == incomingChecksum {
@@ -227,9 +230,12 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		bc := exec.Command(srv.opts.buildCmd.cmd, srv.opts.buildCmd.args...)
 		bc.Dir = srv.opts.syncDir
 		if b, err := bc.CombinedOutput(); err != nil {
-			writeProcError(w, fmt.Sprintf("rebuild command failed: %+v", err), b)
+			writeProcError(w, fmt.Sprintf("rebuild command failed: %+v", err), b) // TODO(ahmetb) client of this endpoint is not able to handle MIME type for procError
+			log.Printf("build fail: %s", string(b))
+			// TODO(ahmetb) build error is not making to the user!!!
 			return
 		}
+		log.Printf("build cmd succeeded: %v", srv.opts.buildCmd)
 	}
 
 	srv.nannyLock.Lock()

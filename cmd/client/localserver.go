@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/ahmetb/rundev/lib/fsutil"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"log"
 	"net/http"
@@ -54,6 +55,7 @@ func (srv *localServer) fsHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
+		return
 	}
 	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%v", fs.RootChecksum()))
 	enc := json.NewEncoder(w)
@@ -70,8 +72,8 @@ func (srv *localServer) debugHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", checksum)
-	fmt.Fprintf(w, "opts: %#v\n", srv.opts)
-	fmt.Fprintf(w, "sync opts: %#v\n", srv.opts.sync.opts)
+	fmt.Fprintf(w, "opts: %# v\n", pretty.Formatter(srv.opts))
+	fmt.Fprintf(w, "sync opts: %# v\n", pretty.Formatter(srv.opts.sync.opts))
 }
 
 func (*localServer) unsupported(w http.ResponseWriter, req *http.Request) {
