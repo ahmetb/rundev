@@ -161,12 +161,16 @@ func main() {
 
 func deployCloudRun(ctx context.Context, appName, project, image string) (string, error) {
 	b, err := exec.CommandContext(ctx, "gcloud",
-		"beta", "run", "deploy", "-q", appName,
+		"alpha", "run", "deploy", "-q", appName,
 		"--image="+image,
 		"--project="+project,
-		"--platform=gke",
-		"--cluster=cloudrun",
-		"--cluster-location=us-central1",
+		//"--platform=gke",
+		//"--cluster=cloudrun",
+		//"--cluster-location=us-central1",
+		//"--min-instances=1",
+		"--platform=managed",
+		"--region=us-central1",
+		"--allow-unauthenticated",
 	).CombinedOutput()
 	if err != nil {
 		return "", errors.Wrapf(err, "cloud run deployment failed. output:\n%s", string(b))
@@ -175,9 +179,11 @@ func deployCloudRun(ctx context.Context, appName, project, image string) (string
 	cmd := exec.CommandContext(ctx, "gcloud", "beta",
 		"run", "services", "describe", "-q", appName,
 		"--project="+project,
-		"--platform=gke",
-		"--cluster=cloudrun",
-		"--cluster-location=us-central1",
+		//"--platform=gke",
+		//"--cluster=cloudrun",
+		//"--cluster-location=us-central1",
+		"--platform=managed",
+		"--region=us-central1",
 		"--format=get(status.url)")
 	cmd.Stderr = &stderr
 	b, err = cmd.Output()

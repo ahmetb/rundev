@@ -15,6 +15,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-1173b9f`
+)
+
 type buildOpts struct {
 	dir        string
 	image      string
@@ -131,7 +135,7 @@ func prepEntrypoint(opts remoteRunOpts) string {
 		buildCmdJSON = string(v)
 	}
 
-	cmd := []string{"./rundevd",
+	cmd := []string{"rundevd",
 		"-addr=:8080",
 		"-run-cmd", runCmdJSON}
 	if len(opts.buildCmd) > 0 {
@@ -141,6 +145,8 @@ func prepEntrypoint(opts remoteRunOpts) string {
 		cmd = append(cmd, "-sync-dir="+opts.syncDir)
 	}
 	sw := new(strings.Builder)
+	fmt.Fprintf(sw, "ADD %s /bin/rundevd\n", rundevdURL)
+	fmt.Fprint(sw, "RUN chmod +x /bin/rundevd\n")
 	sw.WriteString("ENTRYPOINT [")
 	for i, a := range cmd {
 		fmt.Fprintf(sw, "%q", a)
