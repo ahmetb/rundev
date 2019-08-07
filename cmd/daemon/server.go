@@ -95,7 +95,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		writeErrorResp(w, http.StatusInternalServerError, errors.Wrap(err, "failed to walk the sync directory"))
 		return
 	}
-	respChecksum := fs.Checksum()
+	respChecksum := fs.RootChecksum()
 	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", respChecksum))
 
 	if respChecksum != reqChecksum {
@@ -140,7 +140,7 @@ func (srv *daemonServer) fsHandler(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
-	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%v", fs.Checksum()))
+	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%v", fs.RootChecksum()))
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(fs); err != nil {
@@ -161,7 +161,7 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
-	fmt.Fprintf(w, "fs checksum: %v\n", fs.Checksum())
+	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
 	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
 	fmt.Fprintf(w, "opts: %#v\n", srv.opts)
 }
@@ -203,7 +203,7 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
-	localChecksum := fmt.Sprintf("%d", fs.Checksum())
+	localChecksum := fmt.Sprintf("%d", fs.RootChecksum())
 	if localChecksum == incomingChecksum {
 		// no-op, already in sync
 		w.WriteHeader(http.StatusAccepted)
@@ -263,7 +263,7 @@ func writeErrorResp(w http.ResponseWriter, code int, err error) {
 }
 
 func writeChecksumMismatchResp(w http.ResponseWriter, fs fsutil.FSNode) {
-	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", fs.Checksum()))
+	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", fs.RootChecksum()))
 	w.Header().Set("Content-Type", constants.MimeChecksumMismatch)
 	w.WriteHeader(http.StatusPreconditionFailed)
 

@@ -42,12 +42,15 @@ func Test_expandDirEntries(t *testing.T) {
 	}
 
 	expected := []string{
-		filepath.Join(tmp, "empty.whiteout.ph"),
+		filepath.Join(tmp, ""), // root entry
+		filepath.Join(tmp, "empty"),
+		filepath.Join(tmp, "foo"),
 		filepath.Join(tmp, "foo/file1"),
 		filepath.Join(tmp, "foo/file2"),
+		filepath.Join(tmp, "foo/nested"),
 		filepath.Join(tmp, "foo/nested/1"),
 		filepath.Join(tmp, "foo/nested/2"),
-		filepath.Join(tmp, "foo/nested/empty.whiteout.ph"),
+		filepath.Join(tmp, "foo/nested/empty"),
 		filepath.Join(tmp, "zoo1"),
 		filepath.Join(tmp, "zoo2")}
 

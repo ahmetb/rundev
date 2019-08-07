@@ -66,7 +66,9 @@ func (p *procNanny) kill() {
 		p.proc.Release()
 	}
 	p.active = false
-	p.opts.logs.Reset()
+	if p.opts.logs != nil {
+		p.opts.logs.Reset()
+	}
 }
 
 func (p *procNanny) replace() error {

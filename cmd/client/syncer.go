@@ -29,7 +29,7 @@ func (s *syncer) checksum() (uint64, error) {
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to walk the local fs")
 	}
-	return fs.Checksum(), nil
+	return fs.RootChecksum(), nil
 }
 
 // uploadPatch creates and uploads a patch to remote endpoint to be
@@ -39,7 +39,7 @@ func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum strin
 	if err != nil {
 		return errors.Wrapf(err, "failed to walk local fs dir %s", s.opts.localDir)
 	}
-	localChecksum := localFS.Checksum()
+	localChecksum := localFS.RootChecksum()
 
 	log.Printf("checksum mismatch local=%d remote=%s", localChecksum, currentRemoteChecksum)
 	diff := fsutil.FSDiff(localFS, remoteFS)

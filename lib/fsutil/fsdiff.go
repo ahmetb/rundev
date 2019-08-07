@@ -27,7 +27,7 @@ func (o DiffOp) String() string {
 	return s + " " + o.Path
 }
 
-// FSDiff returns the operations that needs to be done on n2 to make it look like n1
+// FSDiff returns the operations that needs to be done on n2 to make it look like n1.
 func FSDiff(n1, n2 FSNode) []DiffOp {
 	return fsDiffInner(n1, n2, ".")
 }
@@ -49,7 +49,7 @@ func fsDiffInner(n1, n2 FSNode, base string) []DiffOp {
 			if l.Mode.IsDir() != r.Mode.IsDir() { // one of them is a directory
 				ops = append(ops, DiffOp{Type: DiffOpDel, Path: canonicalPath(base, l.Name)})
 				ops = append(ops, DiffOp{Type: DiffOpAdd, Path: canonicalPath(base, l.Name)})
-			} else if l.Checksum() != r.Checksum() { // Checksum mismatch (Size, Mtime, chmod)
+			} else if l.checksum() != r.checksum() {
 				if !l.Mode.IsDir() && !r.Mode.IsDir() {
 					// Nodes are not dir, re-upload file
 					ops = append(ops, DiffOp{Type: DiffOpAdd, Path: canonicalPath(base, l.Name)})

@@ -55,7 +55,7 @@ func (srv *localServer) fsHandler(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
-	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%v", fs.Checksum()))
+	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%v", fs.RootChecksum()))
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(fs); err != nil {

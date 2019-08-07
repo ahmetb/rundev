@@ -25,12 +25,20 @@ func (f FSNode) String() string {
 		f.Name + " (" + fmt.Sprintf("%d", len(f.Nodes)) + ") nodes"
 }
 
-func (f FSNode) Checksum() uint64 {
+// RootChecksum computes the checksum of the directory through its child nodes.
+// It doesn't take f’s own name, mode, size and mtime into account.
+func (f FSNode) RootChecksum() uint64 {
+	return f.childrenChecksum()
+}
+
+// checksum computes the checksum of f based on f itself and its children.
+func (f FSNode) checksum() uint64 {
 	h := fnv.New64()
 	h.Write([]byte(f.Name))
 	a1 := uint64(f.Size)
 	a2 := uint64(f.Mode)
 	a3 := uint64(f.Mtime.UnixNano())
+	a4 := f.childrenChecksum()
 
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, a1)
@@ -39,8 +47,17 @@ func (f FSNode) Checksum() uint64 {
 	h.Write(b)
 	binary.LittleEndian.PutUint64(b, a3)
 	h.Write(b)
+	binary.LittleEndian.PutUint64(b, a4)
+	h.Write(b)
+	return h.Sum64()
+}
+
+// childrenChecksum computes the checksum f’s child nodes.
+func (f FSNode) childrenChecksum() uint64 {
+	h := fnv.New64()
+	b := make([]byte, 8)
 	for _, c := range f.Nodes {
-		v := c.Checksum()
+		v := c.checksum()
 		binary.LittleEndian.PutUint64(b, v)
 		h.Write(b)
 	}
