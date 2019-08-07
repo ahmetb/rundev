@@ -6,21 +6,20 @@ Installation
 ------------
 You need to check out the source code and build using Go:
 
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./rundevd ./cmd/daemon
-	go build -o ./rundev ./cmd/client
-
-Integrate to your app
----------------------
-
-Add rundev to your container image's current working directory.
-(In the future, this step should go away.)
+     go build -o ./rundev ./cmd/client
 
 Start developing
 ---------------
 
-Run:
-	rundev -local-dir ~/workspace/py-hello \
-	    -run-cmd "python app.py"
+Switch into your application's source directory.
+
+For an application that picks up new source code by restarting, just run:
+
+    rundev
+
+For an application that needs a build step, specify a build command like:
+
+    rundev -build-cmd 'go build -o /out/server .'
 
 This command will:
 
@@ -28,6 +27,8 @@ This command will:
   2. build and push a container image to your project
   2. deploy your app to Cloud Run
   3. start a local HTTP server on localhost:8080 for development.
+
+Visit http://localhost:8080 to access your application with live code sync.
 
 Every time you make a request to this address:
   - local file system will be synced (if necessary) to containers on Cloud Run
