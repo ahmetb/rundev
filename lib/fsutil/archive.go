@@ -3,6 +3,7 @@ package fsutil
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/pkg/errors"
 	"io"
@@ -14,9 +15,11 @@ import (
 // PatchArchive creates a tarball for given operations in baseDir and returns its size.
 func PatchArchive(baseDir string, ops []DiffOp) (io.Reader, int, error) {
 	var b bytes.Buffer
-	cw := new(countWriter)
-	w := io.MultiWriter(&b, cw)
-	tw := tar.NewWriter(w)
+	gw, err := gzip.NewWriterLevel(&b, gzip.BestSpeed)
+	if err != nil {
+		return nil, -1, errors.Wrap(err, "failed to initialize gzip writer")
+	}
+	tw := tar.NewWriter(gw)
 
 	files, err := normalizeFiles(baseDir, ops)
 	if err != nil {
@@ -29,9 +32,12 @@ func PatchArchive(baseDir string, ops []DiffOp) (io.Reader, int, error) {
 		}
 	}
 	if err := tw.Close(); err != nil {
-		return nil, -1, errors.Wrap(err, "failed to finalize tarball")
+		return nil, -1, errors.Wrap(err, "failed to finalize tarball writer")
 	}
-	return &b, cw.n, nil
+	if err := gw.Close(); err != nil {
+		return nil, -1, errors.Wrap(err, "failed to finalize gzip writer")
+	}
+	return &b, b.Len(), nil
 }
 
 func addFile(tw *tar.Writer, file archiveFile) error {

@@ -7,6 +7,7 @@ import (
 	"github.com/ahmetb/rundev/lib/fsutil"
 	"github.com/pkg/errors"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -66,11 +67,12 @@ func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum strin
 	if err != nil {
 		return errors.Wrap(err, "error making patch request")
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	newRemoteChecksum := resp.Header.Get(constants.HdrRundevChecksum)
 	if expected := http.StatusAccepted; resp.StatusCode != expected {
-		return errors.Errorf("unexpected patch response status=%d (was expecting http %d) (new remote checksum: %s, old remote checksum: %s, local: %d)",
-			resp.StatusCode, expected, newRemoteChecksum, currentRemoteChecksum, localChecksum)
+		b, _ := ioutil.ReadAll(resp.Body)
+		return errors.Errorf("unexpected patch response status=%d (was expecting http %d) (new remote checksum: %s, old remote checksum: %s, local: %d). response body: %s",
+			resp.StatusCode, expected, newRemoteChecksum, currentRemoteChecksum, localChecksum, string(b))
 	}
 	return nil
 }

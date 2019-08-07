@@ -2,6 +2,7 @@ package fsutil
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/pkg/errors"
 	"io"
@@ -11,7 +12,11 @@ import (
 )
 
 func ApplyPatch(dir string, r io.ReadCloser) error {
-	tr := tar.NewReader(r)
+	gr, err := gzip.NewReader(r)
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize gzip reader")
+	}
+	tr := tar.NewReader(gr)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
