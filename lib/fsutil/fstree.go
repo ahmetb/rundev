@@ -15,8 +15,8 @@ import (
 type FSNode struct {
 	Name  string      `json:"name"`
 	Mode  os.FileMode `json:"mode"`
-	Size  int64       `json:"size,omitempty"`
-	Mtime time.Time   `json:"mtime"`
+	Size  int64       `json:"size,omitempty"` // zero for dirs and whiteout files
+	Mtime time.Time   `json:"mtime"`          // in UTC, zero time for dirs
 	Nodes []FSNode    `json:"nodes,omitempty"`
 }
 
@@ -57,7 +57,7 @@ func Walk(dir string) (FSNode, error) {
 	}
 
 	n, err := walkFile(dir, fi)
-	n.Name = "$root" // value doesn't matter, but should be consistent on local vs remote
+	n.Name = "$root" // value doesn't matter, but should be the same on local vs remote as we don't care about dir basename
 	return n, errors.Wrap(err, "failed to traverse directory tree")
 }
 
@@ -66,13 +66,13 @@ func walkFile(path string, fi os.FileInfo) (FSNode, error) {
 		Name:  fi.Name(),
 		Mode:  fi.Mode(),
 		Size:  fi.Size(),
-		Mtime: fi.ModTime().Truncate(time.Second), // tarballs don't support nsecs in time spec
+		Mtime: fi.ModTime().Truncate(time.Second).UTC(), // tarballs don't support nsecs in time spec
 	}
 	if !fi.IsDir() {
 		return n, nil
 	}
-	n.Size = 0                // zero size for dirs
-	n.Mtime = time.Unix(0, 0) // zero time for dirs
+	n.Size = 0                      // zero size for dirs
+	n.Mtime = time.Unix(0, 0).UTC() // zero time for dirs
 
 	children, err := ioutil.ReadDir(path)
 	if err != nil {

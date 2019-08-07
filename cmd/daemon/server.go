@@ -93,6 +93,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	fs, err := fsutil.Walk(srv.opts.syncDir)
 	if err != nil {
 		writeErrorResp(w, http.StatusInternalServerError, errors.Wrap(err, "failed to walk the sync directory"))
+		return
 	}
 	respChecksum := fs.Checksum()
 	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", respChecksum))

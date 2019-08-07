@@ -34,8 +34,8 @@ func init() {
 	flLocalDir = flag.String("local-dir", ".", "local directory to sync")
 	flRemoteDir = flag.String("remote-dir", "", "remote directory to sync (inside the container), defaults to container's WORKDIR")
 	flAddr = flag.String("addr", "localhost:8080", "network address to start the local proxy server")
-	flBuildCmd = flag.String("build-cmd", "", "command to re-build code (inside the container)")
-	flRunCmd = flag.String("run-cmd", "", "command to start application (inside the container)")
+	flBuildCmd = flag.String("build-cmd", "", "command to re-build code (inside the container) after syncing")
+	flRunCmd = flag.String("run-cmd", "", "command to start application (inside the container) after syncing")
 	flNoCloudRun = flag.Bool("no-cloudrun", false, "do not deploy to Cloud Run (you should start rundevd on localhost:8888)")
 	flag.Parse()
 }
@@ -54,7 +54,7 @@ func main() {
 		log.Fatalf("-run-cmd not specified")
 	}
 	if fi, err := os.Stat(*flLocalDir); err != nil {
-		log.Fatalf("cannot open -local-dir: %v",err)
+		log.Fatalf("cannot open -local-dir: %v", err)
 	} else if !fi.IsDir() {
 		log.Fatalf("-local-dir (%s) is not a directory (%s)", *flLocalDir, fi.Mode())
 	}
@@ -88,7 +88,7 @@ func main() {
 			dir:        *flLocalDir,
 			image:      imageName,
 			dockerfile: df}
-		log.Print("building docker image")
+		log.Print("building and pushing docker image")
 		if err := dockerBuildPush(ctx, bo); err != nil {
 			log.Fatal(err)
 		}
