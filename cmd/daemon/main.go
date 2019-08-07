@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
-	"github.com/google/shlex"
 	"log"
 	"net/http"
 	"os"
@@ -27,8 +27,8 @@ func init() {
 	}
 	flag.StringVar(&flSyncDir, "sync-dir", ".", "directory to sync")
 	flag.StringVar(&flAddr, "addr", listenAddr, "network address to start the daemon") // TODO(ahmetb): make this obey $PORT
-	flag.StringVar(&flBuildCmd, "build-cmd", "", "command to rebuild the user app (inside the container)")
-	flag.StringVar(&flRunCmd, "run-cmd", "", "command to start the user app (inside the container)")
+	flag.StringVar(&flBuildCmd, "build-cmd", "", "(JSON array encoded as string) command to rebuild the user app (inside the container)")
+	flag.StringVar(&flRunCmd, "run-cmd", "", "(JSON array encoded as string) command to start the user app (inside the container)")
 	flag.IntVar(&flChildPort, "user-port", 5555, "PORT environment variable passed to the user app")
 	flag.DurationVar(&flProcessListenTimeout, "process-listen-timeout", time.Second*4, "time to wait for user app to listen on PORT")
 	flag.Parse()
@@ -63,9 +63,9 @@ func main() {
 	if flRunCmd == "" {
 		log.Fatal("-run-cmd is empty")
 	}
-	runCmds, err := shlex.Split(flRunCmd)
-	if err != nil {
-		log.Fatalf("failed to parse -run-cmd: %s", err)
+	var runCmds []string
+	if err := json.Unmarshal([]byte(flRunCmd), &runCmds); err != nil {
+		log.Fatalf("failed to parse -run-cmd: %v", err)
 	} else if len(runCmds) == 0 {
 		log.Fatal("-run-cmd parsed into zero tokens")
 	}
@@ -73,8 +73,8 @@ func main() {
 
 	var buildCmd *cmd
 	if flBuildCmd != "" {
-		buildCmds, err := shlex.Split(flBuildCmd)
-		if err != nil {
+		var buildCmds []string
+		if err := json.Unmarshal([]byte(flBuildCmd), &buildCmds); err != nil {
 			log.Fatalf("failed to parse -build-cmd: %s", err)
 		} else if len(buildCmds) == 0 {
 			log.Fatal("-build-cmd parsed into zero tokens")

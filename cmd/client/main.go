@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"github.com/google/shlex"
 	"log"
 	"net/http"
 	"os"
@@ -26,16 +27,16 @@ var (
 
 type remoteRunOpts struct {
 	syncDir  string
-	buildCmd string
-	runCmd   string
+	buildCmd []string
+	runCmd   []string
 }
 
 func init() {
 	flLocalDir = flag.String("local-dir", ".", "local directory to sync")
 	flRemoteDir = flag.String("remote-dir", "", "remote directory to sync (inside the container), defaults to container's WORKDIR")
 	flAddr = flag.String("addr", "localhost:8080", "network address to start the local proxy server")
-	flBuildCmd = flag.String("build-cmd", "", "command to re-build code (inside the container) after syncing")
-	flRunCmd = flag.String("run-cmd", "", "command to start application (inside the container) after syncing")
+	flBuildCmd = flag.String("build-cmd", "", "(optional) command to re-build code (inside the container) after syncing")
+	flRunCmd = flag.String("run-cmd", "", "(optional) command to start application (inside the container) after syncing, inferred from Dockerfile by default")
 	flNoCloudRun = flag.Bool("no-cloudrun", false, "do not deploy to Cloud Run (you should start rundevd on localhost:8888)")
 	flag.Parse()
 }
@@ -50,9 +51,6 @@ func main() {
 		log.Printf("termination signal received: %s", sig)
 		cancel()
 	}()
-	if *flRunCmd == "" {
-		log.Fatalf("-run-cmd not specified")
-	}
 	if fi, err := os.Stat(*flLocalDir); err != nil {
 		log.Fatalf("cannot open -local-dir: %v", err)
 	} else if !fi.IsDir() {
@@ -76,10 +74,37 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		var runCmd, buildCmd cmd
+		if *flRunCmd == "" {
+			runCmd, err = parseDockerfileEntrypoint(df)
+			if err != nil {
+				log.Fatalf("failed to parse entrypoint/cmd from dockerfile. try specifying -run-cmd? error: %+v", err)
+			}
+			log.Printf("parsed entrypoint as %s", runCmd)
+		} else {
+			v, err := shlex.Split(*flRunCmd)
+			if err != nil {
+				log.Fatalf("failed to parse -run-cmd into commands and args: %+v", err)
+			}
+			runCmd = cmd{v[0], v[1:]}
+		}
+
+		if *flBuildCmd == "" {
+			log.Fatal("-build-cmd not specified: if you have steps to build your code after syncing, use this flag")
+		} else {
+			v, err := shlex.Split(*flBuildCmd)
+			if err != nil {
+				log.Fatalf("failed to parse -build-cmd into commands and args: %+v", err)
+			}
+			buildCmd = cmd{v[0], v[1:]}
+			log.Printf("parsed -build-cmd as: %s", buildCmd)
+		}
+
 		ro := remoteRunOpts{
 			syncDir:  *flRemoteDir,
-			buildCmd: *flBuildCmd,
-			runCmd:   *flRunCmd,
+			runCmd:   append([]string{runCmd.cmd}, runCmd.args...),
+			buildCmd: append([]string{buildCmd.cmd}, buildCmd.args...),
 		}
 		df = append(df, '\n')
 		df = append(df, []byte(prepEntrypoint(ro))...)
@@ -135,10 +160,11 @@ func deployCloudRun(ctx context.Context, appName, project, image string) (string
 	b, err := exec.CommandContext(ctx, "gcloud",
 		"beta", "run", "deploy", "-q", appName,
 		"--image="+image,
-		"--allow-unauthenticated",
 		"--project="+project,
-		"--platform=managed",
-		"--region=us-central1").CombinedOutput()
+		"--platform=gke",
+		"--cluster=cloudrun",
+		"--cluster-location=us-central1",
+	).CombinedOutput()
 	if err != nil {
 		return "", errors.Wrapf(err, "cloud run deployment failed. output:\n%s", string(b))
 	}
@@ -146,8 +172,9 @@ func deployCloudRun(ctx context.Context, appName, project, image string) (string
 	cmd := exec.CommandContext(ctx, "gcloud", "beta",
 		"run", "services", "describe", "-q", appName,
 		"--project="+project,
-		"--region=us-central1",
-		"--platform=managed",
+		"--platform=gke",
+		"--cluster=cloudrun",
+		"--cluster-location=us-central1",
 		"--format=get(status.url)")
 	cmd.Stderr = &stderr
 	b, err = cmd.Output()
