@@ -34,6 +34,13 @@ func (c cmd) String() string {
 	return s
 }
 
+func (c cmd) List() []string {
+	if c.cmd == "" {
+		return nil
+	}
+	return append([]string{c.cmd}, c.args...)
+}
+
 func dockerBuildPush(ctx context.Context, opts buildOpts) error {
 	b, err := exec.CommandContext(ctx, "docker", "version").CombinedOutput()
 	if err != nil {
@@ -127,7 +134,7 @@ func prepEntrypoint(opts remoteRunOpts) string {
 	cmd := []string{"./rundevd",
 		"-addr=:8080",
 		"-run-cmd", runCmdJSON}
-	if buildCmdJSON != "" {
+	if len(opts.buildCmd) > 0 {
 		cmd = append(cmd, "-build-cmd", buildCmdJSON)
 	}
 	if opts.syncDir != "" {
@@ -138,7 +145,7 @@ func prepEntrypoint(opts remoteRunOpts) string {
 	for i, a := range cmd {
 		fmt.Fprintf(sw, "%q", a)
 		if i != len(cmd)-1 {
-			sw.WriteString(`, `)
+			sw.WriteString(", \\\n\t\t")
 		}
 	}
 	sw.WriteString(`]`)

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -103,12 +104,14 @@ func main() {
 
 		ro := remoteRunOpts{
 			syncDir:  *flRemoteDir,
-			runCmd:   append([]string{runCmd.cmd}, runCmd.args...),
-			buildCmd: append([]string{buildCmd.cmd}, buildCmd.args...),
+			runCmd:   runCmd.List(),
+			buildCmd: buildCmd.List(),
 		}
+		newEntrypoint := prepEntrypoint(ro)
+		log.Printf("[info] injecting to dockerfile:\n%s", regexp.MustCompile("(?m)^").ReplaceAllString(newEntrypoint, "\t"))
+
 		df = append(df, '\n')
-		df = append(df, []byte(prepEntrypoint(ro))...)
-		df = append(df, []byte("\nCMD []")...)
+		df = append(df, []byte(newEntrypoint)...)
 		bo := buildOpts{
 			dir:        *flLocalDir,
 			image:      imageName,
