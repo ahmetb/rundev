@@ -53,6 +53,11 @@ func main() {
 	if *flRunCmd == "" {
 		log.Fatalf("-run-cmd not specified")
 	}
+	if fi, err := os.Stat(*flLocalDir); err != nil {
+		log.Fatalf("cannot open -local-dir: %v",err)
+	} else if !fi.IsDir() {
+		log.Fatalf("-local-dir (%s) is not a directory (%s)", *flLocalDir, fi.Mode())
+	}
 
 	var rundevdURL string
 	if *flNoCloudRun {

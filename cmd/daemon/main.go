@@ -35,6 +35,8 @@ func init() {
 }
 
 func main() {
+	// TODO(ahmetb) instead of crashing the process on flag errors, consider serving error response type so it encourages a redeploy
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	signalCh := make(chan os.Signal, 1)
@@ -48,6 +50,7 @@ func main() {
 	if flSyncDir == "" {
 		log.Fatal("-sync-dir is empty")
 	}
+	// TODO(ahmetb) check if flSyncDir is a directory
 	if flAddr == "" {
 		log.Fatal("-addr is empty")
 	}
