@@ -8,4 +8,5 @@ require (
 	github.com/kr/pretty v0.1.0
 	github.com/moby/buildkit v0.6.0
 	github.com/pkg/errors v0.8.1
+	google.golang.org/api v0.7.0
 )

@@ -23,12 +23,15 @@ For an application that needs a build step, specify a build command like:
 
 This command will:
 
-  1. in-memory overwrite your Dockerfile to run ./rundevd
+  1. in-memory overwrite your Dockerfile to install and run /bin/rundevd daemon
+     which wraps your original ENTRYPOINT/CMD.
   2. build and push a container image to your project
   2. deploy your app to Cloud Run
   3. start a local HTTP server on localhost:8080 for development.
 
 Visit http://localhost:8080 to access your application with live code sync.
+Change your code, and visit your address to see the updated application.
+When you're done developing, hit Ctrl+C once for cleanup and exit.
 
 Every time you make a request to this address:
   - local file system will be synced (if necessary) to containers on Cloud Run

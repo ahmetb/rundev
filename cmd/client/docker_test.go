@@ -33,6 +33,18 @@ func Test_parseDockerfileEntrypoint(t *testing.T) {
 			want: cmd{"/bin/sh", []string{"-c", "/bin/server"}},
 		},
 		{
+			name: "repetitive entrypoint",
+			df: `ENTRYPOINT ["/bin/date"]
+					ENTRYPOINT ["/bin/server"]"`,
+			want: cmd{"/bin/server", []string{}},
+		},
+		{
+			name: "repetitive cmd",
+			df: `CMD ["/bin/date"]
+					CMD ["/bin/server"]"`,
+			want: cmd{"/bin/server", []string{}},
+		},
+		{
 			name: "just entrypoint (json)",
 			df:   `ENTRYPOINT ["/bin/server"]`,
 			want: cmd{"/bin/server", []string{}},
@@ -41,6 +53,19 @@ func Test_parseDockerfileEntrypoint(t *testing.T) {
 			name: "mix of entrypoint and cmd (both json)",
 			df: `ENTRYPOINT ["/bin/server"]
 					CMD ["arg1", "arg2"]`,
+			want: cmd{"/bin/server", []string{"arg1", "arg2"}},
+		},
+		{
+			name: "mix of entrypoint and cmd (both json), ordering should not matter",
+			df: `CMD ["arg1", "arg2"]
+					ENTRYPOINT ["/bin/server"]`,
+			want: cmd{"/bin/server", []string{"arg1", "arg2"}},
+		},
+		{
+			name: "mix of entrypoint and cmd (both json), earlier CMDs are ignored",
+			df: `CMD ["arg0"]
+					CMD ["arg1", "arg2"]
+					ENTRYPOINT ["/bin/server"]`,
 			want: cmd{"/bin/server", []string{"arg1", "arg2"}},
 		},
 		{

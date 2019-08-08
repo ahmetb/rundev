@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"github.com/google/shlex"
+	"google.golang.org/api/googleapi"
+	run "google.golang.org/api/run/v1alpha1"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +15,7 @@ import (
 	"os/signal"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/pkg/errors"
@@ -24,6 +28,12 @@ var (
 	flBuildCmd   *string
 	flRunCmd     *string
 	flNoCloudRun *bool
+)
+
+const (
+	appName         = `rundev-app`  // TODO(ahmetb) use basename(realpath($CWD)), or allow user to configure
+	runRegion       = `us-central1` // TODO(ahmetb) allow user to configure
+	cleanupDeadline = time.Second * 1
 )
 
 type remoteRunOpts struct {
@@ -64,7 +74,6 @@ func main() {
 		log.Printf("not deploying to Cloud Run. make sure to start rundevd at %s", rundevdURL)
 	} else {
 		log.Printf("starting one-time build & push & deploy")
-		const appName = `rundev-app` // TODO(ahmetb) use basename(realpath($CWD)
 		project, err := currentProject(ctx)
 		if err != nil {
 			log.Fatalf("error reading current project ID from gcloud: %+v", err)
@@ -109,7 +118,6 @@ func main() {
 		}
 		newEntrypoint := prepEntrypoint(ro)
 		log.Printf("[info] injecting to dockerfile:\n%s", regexp.MustCompile("(?m)^").ReplaceAllString(newEntrypoint, "\t"))
-
 		df = append(df, '\n')
 		df = append(df, []byte(newEntrypoint)...)
 		bo := buildOpts{
@@ -123,10 +131,11 @@ func main() {
 		log.Printf("built and pushed docker image: %s", imageName)
 
 		log.Print("deploying to Cloud Run")
-		appURL, err := deployCloudRun(ctx, appName, project, imageName)
+		appURL, err := deployCloudRun(ctx, project, runRegion, appName, imageName)
 		if err != nil {
 			log.Fatalf("error deploying to Cloud Run: %+v", err)
 		}
+		defer cleanupCloudRun(appName, project, runRegion, cleanupDeadline)
 		rundevdURL = appURL
 	}
 	sync := newSyncer(syncOpts{
@@ -153,13 +162,13 @@ func main() {
 	if err := localServer.ListenAndServe(); err != nil {
 		if err == http.ErrServerClosed {
 			log.Printf("local server shut down gracefully, exiting")
-			os.Exit(0)
+		} else {
+			log.Fatalf("local server failed to start: %+v", err)
 		}
-		log.Fatalf("local server failed to start: %+v", err)
 	}
 }
 
-func deployCloudRun(ctx context.Context, appName, project, image string) (string, error) {
+func deployCloudRun(ctx context.Context, project, region, appName, image string) (string, error) {
 	b, err := exec.CommandContext(ctx, "gcloud",
 		"alpha", "run", "deploy", "-q", appName,
 		"--image="+image,
@@ -167,9 +176,8 @@ func deployCloudRun(ctx context.Context, appName, project, image string) (string
 		//"--platform=gke",
 		//"--cluster=cloudrun",
 		//"--cluster-location=us-central1",
-		//"--min-instances=1",
 		"--platform=managed",
-		"--region=us-central1",
+		"--region="+region,
 		"--allow-unauthenticated",
 	).CombinedOutput()
 	if err != nil {
@@ -178,19 +186,50 @@ func deployCloudRun(ctx context.Context, appName, project, image string) (string
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "gcloud", "beta",
 		"run", "services", "describe", "-q", appName,
+		"--format=get(status.url)",
 		"--project="+project,
 		//"--platform=gke",
 		//"--cluster=cloudrun",
 		//"--cluster-location=us-central1",
 		"--platform=managed",
-		"--region=us-central1",
-		"--format=get(status.url)")
+		"--region="+region,
+	)
 	cmd.Stderr = &stderr
 	b, err = cmd.Output()
 	if err != nil {
 		return "", errors.Wrapf(err, "cloud run describe failed. stderr:\n%s", string(stderr.Bytes()))
 	}
 	return strings.TrimSpace(string(b)), nil
+}
+
+// cleanupCloudRun fires and forgets a delete request to Cloud Run.
+// TODO: make it work with CR-GKE as well.
+func cleanupCloudRun(appName, project, region string, timeout time.Duration) {
+	log.Printf("cleaning up Cloud Run service %q", appName)
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.TODO(), timeout)
+	defer cleanupCancel()
+	rs, err := run.NewService(cleanupCtx)
+	if err != nil {
+		log.Printf("[warn] failed to initialize cloudrun client: %+v", err)
+		return
+	}
+	rs.BasePath = strings.Replace(rs.BasePath, "://", "://"+region+"-", 1)
+	uri := fmt.Sprintf("namespaces/%s/services/%s", project, appName)
+	_, err = rs.Namespaces.Services.Delete(uri).Do()
+	if err == nil {
+		log.Printf("cleanup successful")
+		return
+	}
+	if v, ok := err.(*googleapi.Error); ok {
+		if v.Code == http.StatusNotFound {
+			log.Printf("cloud run app already gone, that's weird")
+			return
+		}
+		log.Printf("[warn] run api cleanup call responded with error: %+v\nbody: %s",
+			v, v.Body)
+	} else {
+		log.Printf("[warn] calling run api for cleanup failed: %+v", err)
+	}
 }
 
 func currentProject(ctx context.Context) (string, error) {
