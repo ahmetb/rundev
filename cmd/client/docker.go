@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-1173b9f`
+	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-1c761fc`
 )
 
 type buildOpts struct {
