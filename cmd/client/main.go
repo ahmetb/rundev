@@ -1,24 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"flag"
-	"fmt"
 	"github.com/google/shlex"
-	"google.golang.org/api/googleapi"
-	run "google.golang.org/api/run/v1alpha1"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"regexp"
-	"strings"
 	"time"
-	"unicode"
-
-	"github.com/pkg/errors"
 )
 
 var (
@@ -28,11 +19,16 @@ var (
 	flBuildCmd   *string
 	flRunCmd     *string
 	flNoCloudRun *bool
+
+	flCloudRunCluster         *string
+	flCloudRunClusterLocation *string
+	flCloudRunPlatform        *string
 )
 
 const (
-	appName         = `rundev-app`  // TODO(ahmetb) use basename(realpath($CWD)), or allow user to configure
-	runRegion       = `us-central1` // TODO(ahmetb) allow user to configure
+	appName         = `rundev-app`            // TODO(ahmetb) use basename(realpath($CWD)), or allow user to configure
+	runRegion       = `us-central1`           // TODO(ahmetb) allow user to configure
+	localRundevdURL = "http://localhost:8888" // TODO(ahmetb) allow user to configure (albeit, just for debugging/dev rundev itself, a.k.a -no-cloudrun)
 	cleanupDeadline = time.Second * 1
 )
 
@@ -49,6 +45,9 @@ func init() {
 	flBuildCmd = flag.String("build-cmd", "", "(optional) command to re-build code (inside the container) after syncing")
 	flRunCmd = flag.String("run-cmd", "", "(optional) command to start application (inside the container) after syncing, inferred from Dockerfile by default")
 	flNoCloudRun = flag.Bool("no-cloudrun", false, "do not deploy to Cloud Run (you should start rundevd on localhost:8888)")
+	flCloudRunPlatform = flag.String("platform", "managed", "(passthrough to gcloud) managed or gke")
+	flCloudRunCluster = flag.String("cluster", "", "(passthrough to gcloud) required when -platform=gke")
+	flCloudRunClusterLocation = flag.String("cluster-location", "", "(passthrough to gcloud) required when -platform=gke")
 	flag.Parse()
 }
 
@@ -68,15 +67,28 @@ func main() {
 		log.Fatalf("-local-dir (%s) is not a directory (%s)", *flLocalDir, fi.Mode())
 	}
 
+	if *flCloudRunPlatform == "" {
+		log.Fatal("-platform is empty")
+	} else if *flCloudRunPlatform != cloudRunManagedPlatform {
+		if *flCloudRunCluster == "" {
+			log.Fatal("-cluster is empty, must be supplied when -platform is specified")
+		} else if *flCloudRunClusterLocation == "" {
+			log.Fatal("-cluster-location is empty, must be supplied when -platform is specified")
+		}
+	}
+
 	var rundevdURL string
 	if *flNoCloudRun {
-		rundevdURL = "http://localhost:8888"
+		rundevdURL = localRundevdURL
 		log.Printf("not deploying to Cloud Run. make sure to start rundevd at %s", rundevdURL)
 	} else {
 		log.Printf("starting one-time build & push & deploy")
 		project, err := currentProject(ctx)
 		if err != nil {
 			log.Fatalf("error reading current project ID from gcloud: %+v", err)
+		}
+		if project == "" {
+			log.Fatalf("default project not set on gcloud. run: gcloud config set core/project PROJECT_NAME")
 		}
 		imageName := `gcr.io/` + project + `/` + appName
 
@@ -131,7 +143,13 @@ func main() {
 		log.Printf("built and pushed docker image: %s", imageName)
 
 		log.Print("deploying to Cloud Run")
-		appURL, err := deployCloudRun(ctx, project, runRegion, appName, imageName)
+		appURL, err := deployCloudRun(ctx, cloudrunOpts{
+			platform:        *flCloudRunPlatform,
+			project:         project,
+			region:          runRegion,
+			cluster:         *flCloudRunCluster,
+			clusterLocation: *flCloudRunClusterLocation,
+		}, appName, imageName)
 		if err != nil {
 			log.Fatalf("error deploying to Cloud Run: %+v", err)
 		}
@@ -166,77 +184,4 @@ func main() {
 			log.Fatalf("local server failed to start: %+v", err)
 		}
 	}
-}
-
-func deployCloudRun(ctx context.Context, project, region, appName, image string) (string, error) {
-	b, err := exec.CommandContext(ctx, "gcloud",
-		"alpha", "run", "deploy", "-q", appName,
-		"--image="+image,
-		"--project="+project,
-		//"--platform=gke",
-		//"--cluster=cloudrun",
-		//"--cluster-location=us-central1",
-		"--platform=managed",
-		"--region="+region,
-		"--allow-unauthenticated",
-	).CombinedOutput()
-	if err != nil {
-		return "", errors.Wrapf(err, "cloud run deployment failed. output:\n%s", string(b))
-	}
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "gcloud", "beta",
-		"run", "services", "describe", "-q", appName,
-		"--format=get(status.url)",
-		"--project="+project,
-		//"--platform=gke",
-		//"--cluster=cloudrun",
-		//"--cluster-location=us-central1",
-		"--platform=managed",
-		"--region="+region,
-	)
-	cmd.Stderr = &stderr
-	b, err = cmd.Output()
-	if err != nil {
-		return "", errors.Wrapf(err, "cloud run describe failed. stderr:\n%s", string(stderr.Bytes()))
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-
-// cleanupCloudRun fires and forgets a delete request to Cloud Run.
-// TODO: make it work with CR-GKE as well.
-func cleanupCloudRun(appName, project, region string, timeout time.Duration) {
-	log.Printf("cleaning up Cloud Run service %q", appName)
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.TODO(), timeout)
-	defer cleanupCancel()
-	rs, err := run.NewService(cleanupCtx)
-	if err != nil {
-		log.Printf("[warn] failed to initialize cloudrun client: %+v", err)
-		return
-	}
-	rs.BasePath = strings.Replace(rs.BasePath, "://", "://"+region+"-", 1)
-	uri := fmt.Sprintf("namespaces/%s/services/%s", project, appName)
-	_, err = rs.Namespaces.Services.Delete(uri).Do()
-	if err == nil {
-		log.Printf("cleanup successful")
-		return
-	}
-	if v, ok := err.(*googleapi.Error); ok {
-		if v.Code == http.StatusNotFound {
-			log.Printf("cloud run app already gone, that's weird")
-			return
-		}
-		log.Printf("[warn] run api cleanup call responded with error: %+v\nbody: %s",
-			v, v.Body)
-	} else {
-		log.Printf("[warn] calling run api for cleanup failed: %+v", err)
-	}
-}
-
-func currentProject(ctx context.Context) (string, error) {
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "gcloud", "config", "get-value", "core/project", "-q")
-	cmd.Stderr = &stderr
-	b, err := cmd.Output()
-	return strings.TrimRightFunc(string(b), unicode.IsSpace),
-		errors.Wrapf(err, "failed to read current GCP project from gcloud: output=%q", stderr.String())
 }

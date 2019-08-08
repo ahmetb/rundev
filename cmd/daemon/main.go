@@ -36,14 +36,13 @@ func init() {
 
 func main() {
 	// TODO(ahmetb) instead of crashing the process on flag errors, consider serving error response type so it encourages a redeploy
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt)
 	go func() {
 		sig := <-signalCh
-		log.Printf("termination signal received: %s", sig)
+		log.Printf("[debug] termination signal received: %s", sig)
 		cancel()
 	}()
 
