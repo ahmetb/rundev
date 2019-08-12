@@ -16,6 +16,7 @@ var (
 	flBuildCmds            string
 	flAddr                 string
 	flSyncDir              string
+	flClientSecret         string
 	flChildPort            int
 	flProcessListenTimeout time.Duration
 )
@@ -26,7 +27,8 @@ func init() {
 		listenAddr = ":" + p
 	}
 	flag.StringVar(&flSyncDir, "sync-dir", ".", "directory to sync")
-	flag.StringVar(&flAddr, "addr", listenAddr, "network address to start the daemon") // TODO(ahmetb): make this obey $PORT
+	flag.StringVar(&flClientSecret, "client-secret", "", "(optional) secret to authenticate patches from rundev client")
+	flag.StringVar(&flAddr, "addr", listenAddr, "network address to start the daemon")
 	flag.StringVar(&flBuildCmds, "build-cmds", "", "(JSON encoded [][]string) commands to rebuild the user app (inside the container)")
 	flag.StringVar(&flRunCmd, "run-cmd", "", "(JSON array encoded as string) command to start the user app (inside the container)")
 	flag.IntVar(&flChildPort, "user-port", 5555, "PORT environment variable passed to the user app")
@@ -82,6 +84,7 @@ func main() {
 	}
 
 	handler := newDaemonServer(daemonOpts{
+		clientSecret:    flClientSecret,
 		syncDir:         flSyncDir,
 		runCmd:          runCmd,
 		buildCmds:       buildCmds,

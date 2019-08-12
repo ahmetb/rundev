@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
@@ -26,8 +27,9 @@ type cmd struct {
 }
 
 type daemonOpts struct {
+	clientSecret    string
 	syncDir         string
-	runCmd         *cmd
+	runCmd          *cmd
 	buildCmds       []cmd
 	childPort       int
 	portWaitTimeout time.Duration
@@ -66,10 +68,29 @@ func newDaemonServer(opts daemonOpts) http.Handler {
 	mux.HandleFunc("/rundevd/debugz", r.statusHandler)
 	mux.HandleFunc("/rundevd/procz", r.logsHandler)
 	mux.HandleFunc("/rundevd/restart", r.restart)
-	mux.HandleFunc("/rundevd/patch", r.patch)
+	mux.HandleFunc("/rundevd/patch", withClientSecretAuth(opts.clientSecret, r.patch))
 	mux.HandleFunc("/rundevd/", r.unsupported) // prevent proxying daemon debug endpoints to user app
 	mux.HandleFunc("/", r.reverseProxyHandler)
 	return mux
+}
+
+func withClientSecretAuth(secret string, hand http.HandlerFunc) http.HandlerFunc {
+	if secret == "" {
+		return hand
+	}
+	return func(w http.ResponseWriter, req *http.Request){
+		h := req.Header.Get(constants.HdrRundevClientSecret)
+		if h == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprintf(w, "%s header not specified", constants.HdrRundevClientSecret)
+			return
+		} else if subtle.ConstantTimeCompare([]byte(secret), []byte(h)) != 1 {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprintf(w, "client secret (%s header) on the request not matching the one configured on the daemon", constants.HdrRundevClientSecret)
+			return
+		}
+		hand(w,req)
+	}
 }
 
 // newReverseProxy returns a reverse proxy to the user’s app.
@@ -107,7 +128,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	if !srv.procNanny.Running() {
 		log.Printf("[reverse proxy] user process not running, restarting")
 		for i, bc := range srv.opts.buildCmds {
-			log.Printf("[reverse proxy] executing build command (%d/%d): %v",i, len(srv.opts.buildCmds), bc)
+			log.Printf("[reverse proxy] executing build command (%d/%d): %v", i, len(srv.opts.buildCmds), bc)
 			cmd := exec.Command(bc.cmd, bc.args...)
 			cmd.Dir = srv.opts.syncDir
 			if b, err := cmd.CombinedOutput(); err != nil {

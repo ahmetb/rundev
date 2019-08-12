@@ -31,6 +31,7 @@ require (
 	github.com/gogo/protobuf v1.2.0 // indirect
 	github.com/google/go-cmp v0.3.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
+	github.com/google/uuid v1.1.1
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645 // indirect
 	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
 	github.com/hashicorp/uuid v0.0.0-20160311170451-ebb0a03e909c // indirect

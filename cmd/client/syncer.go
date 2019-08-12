@@ -13,8 +13,9 @@ import (
 )
 
 type syncOpts struct {
-	localDir   string
-	targetAddr string
+	localDir     string
+	targetAddr   string
+	clientSecret string
 }
 
 type syncer struct {
@@ -61,6 +62,7 @@ func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum strin
 		return errors.Wrap(err, "failed to create patch requeset")
 	}
 	req.Header.Set("Content-Type", constants.MimePatch)
+	req.Header.Set(constants.HdrRundevClientSecret, s.opts.clientSecret)
 	req.Header.Set(constants.HdrRundevPatchPreconditionSum, currentRemoteChecksum)
 	req.Header.Set(constants.HdrRundevChecksum, fmt.Sprintf("%d", localChecksum))
 	resp, err := http.DefaultClient.Do(req)

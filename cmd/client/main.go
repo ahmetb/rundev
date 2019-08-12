@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"github.com/google/shlex"
+	"github.com/google/uuid"
 	"log"
 	"net/http"
 	"os"
@@ -32,12 +33,6 @@ const (
 	cleanupDeadline = time.Second * 1
 )
 
-type remoteRunOpts struct {
-	syncDir   string
-	runCmd    cmd
-	buildCmds []cmd
-}
-
 func init() {
 	flLocalDir = flag.String("local-dir", ".", "local directory to sync")
 	flRemoteDir = flag.String("remote-dir", "", "remote directory to sync (inside the container), defaults to container's WORKDIR")
@@ -53,6 +48,7 @@ func init() {
 }
 
 func main() {
+	clientSecret := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	signalCh := make(chan os.Signal, 1)
@@ -139,9 +135,10 @@ func main() {
 		}
 
 		ro := remoteRunOpts{
-			syncDir:   *flRemoteDir,
-			runCmd:    runCmd,
-			buildCmds: buildCmds,
+			syncDir:      *flRemoteDir,
+			runCmd:       runCmd,
+			buildCmds:    buildCmds,
+			clientSecret: clientSecret,
 		}
 		newEntrypoint := prepEntrypoint(ro)
 		log.Printf("[info] injecting to dockerfile:\n%s", regexp.MustCompile("(?m)^").ReplaceAllString(newEntrypoint, "\t"))
@@ -172,8 +169,9 @@ func main() {
 		rundevdURL = appURL
 	}
 	sync := newSyncer(syncOpts{
-		localDir:   *flLocalDir,
-		targetAddr: rundevdURL,
+		localDir:     *flLocalDir,
+		targetAddr:   rundevdURL,
+		clientSecret: clientSecret,
 	})
 	localServerHandler, err := newLocalServer(localServerOpts{
 		proxyTarget: rundevdURL,
@@ -191,7 +189,7 @@ func main() {
 		log.Println("shutting down server")
 		localServer.Shutdown(ctx) // TODO(ahmetb) maybe use .Close?
 	}()
-	log.Printf("local proxy server starting at %s (proxying to %s)", *flAddr, rundevdURL)
+	log.Printf("local proxy server starting at http://%s (proxying to %s)", *flAddr, rundevdURL)
 	if err := localServer.ListenAndServe(); err != nil {
 		if err == http.ErrServerClosed {
 			log.Printf("local server shut down gracefully, exiting")

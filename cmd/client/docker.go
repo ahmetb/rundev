@@ -12,17 +12,25 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/pkg/errors"
 )
 
 const (
-	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-51c5e14`
+	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-c726a67-dirty?1`
 )
 
 var (
 	runCmdAnnotationPattern = regexp.MustCompile(`#\s?rundev$`)
 )
+
+type remoteRunOpts struct {
+	syncDir      string
+	runCmd       cmd
+	buildCmds    []cmd
+	clientSecret string
+}
 
 type buildOpts struct {
 	dir        string
@@ -123,7 +131,15 @@ func parseBuildCmds(d *dockerfile) []cmd {
 		case "run":
 			if runCmdAnnotationPattern.MatchString(stmt.Original) {
 				c := parseCommand(stmt.Next, stmt.Attributes["json"])
-				out=append(out, cmd{c[0],c[1:]})
+				cm := cmd{c[0], c[1:]}
+				// trim comment at the end of argv (as dockerfile parser isn't doing so)
+				if len(cm.args) > 0 {
+					v := cm.args[len(cm.args)-1]
+					v = runCmdAnnotationPattern.ReplaceAllString(v, "")
+					v = strings.TrimRightFunc(v, unicode.IsSpace)
+					cm.args[len(cm.args)-1] = v
+				}
+				out = append(out, cm)
 			}
 		}
 	}
@@ -158,13 +174,13 @@ func readDockerfile(dir string) ([]byte, error) {
 func prepEntrypoint(opts remoteRunOpts) string {
 	rc, _ := json.Marshal(opts.runCmd.List())
 	cmd := []string{"rundevd",
-		"-addr=:8080",
+		"-client-secret=" + opts.clientSecret,
 		"-run-cmd", string(rc)}
 
 	if len(opts.buildCmds) > 0 {
-		bcs := make([][]string,len(opts.buildCmds))
-		for i,v:= range opts.buildCmds{
-			bcs[i]=v.List()
+		bcs := make([][]string, len(opts.buildCmds))
+		for i, v := range opts.buildCmds {
+			bcs[i] = v.List()
 		}
 		bc, _ := json.Marshal(bcs)
 		cmd = append(cmd, "-build-cmds", string(bc))

@@ -3,6 +3,7 @@ package constants
 const (
 	HdrRundevChecksum             = `rundev-checksum`
 	HdrRundevPatchPreconditionSum = `rundev-apply-if-checksum`
+	HdrRundevClientSecret         = `rundev-client-secret`
 
 	MimeDumbRepeat       = `application/vnd.rundev.repeat`
 	MimeChecksumMismatch = `application/vnd.rundev.checksumMismatch+json`

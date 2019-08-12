@@ -75,6 +75,7 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 				Body:       ioutil.NopCloser(strings.NewReader(fmt.Sprintf("process error: %s\n\noutput:\n%s", pe.Message, pe.Output))),
 			}, nil
 		case constants.MimeDumbRepeat:
+			// only for testing purposes
 			log.Printf("[reverse proxy] remote responded with dumb-repeat")
 		case constants.MimeChecksumMismatch:
 			remoteSum := resp.Header.Get(constants.HdrRundevChecksum)
@@ -95,6 +96,7 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 	return &http.Response{
 		StatusCode: http.StatusInternalServerError,
-		Body:       ioutil.NopCloser(strings.NewReader(fmt.Sprintf("max retries exceeded (%d) syncing code", s.maxRetries))),
+		Body:       ioutil.NopCloser(strings.NewReader(fmt.Sprintf("rundev tried %d times syncing code, but it was still getting a checksum mismatch.\n" +
+			"please report an issue with console logs, /rundev/fsz and /rundevd/fsz responses.", s.maxRetries))),
 	}, nil
 }

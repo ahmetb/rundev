@@ -88,7 +88,7 @@ func Test_parseDockerfileEntrypoint(t *testing.T) {
 		},
 		{
 			name: "multi stage (reset)",
-			df:   `FROM a1 AS c1
+			df: `FROM a1 AS c1
 ENTRYPOINT b
 CMD c d
 FROM a2 as c2
@@ -117,7 +117,7 @@ ENTRYPOINT /bin/server`,
 func Test_parseBuildCmds(t *testing.T) {
 	tests := []struct {
 		name string
-		df string
+		df   string
 		want []cmd
 	}{
 		{
@@ -127,7 +127,7 @@ func Test_parseBuildCmds(t *testing.T) {
 		},
 		{
 			name: "not annotated run cms",
-			df:   `FROM scratch
+			df: `FROM scratch
 RUN apt-get install \
 		-qqy \
 		a b c && rm -rf /tmp/foo`,
@@ -135,27 +135,32 @@ RUN apt-get install \
 		},
 		{
 			name: "some annotated run cmds",
-			df:   `
+			df: `
 FROM scratch
 #rundev
-RUN date
-RUN pip install -r requirements.txt # rundev
+RUN date # xrundev
+RUN date # rundevx
+RUN date # rundev x
+RUN pip install -r requirements.txt        # rundev
 RUN ["/src/hack/build.sh"] #rundev
 RUN date
 `,
 			want: []cmd{
-				{"/bin/sh", []string{"-c","pip install -r requirements.txt # rundev"}}, // https://github.com/moby/buildkit/issues/1127, parser is not trimming inline comments for non-json commands
-				{"/src/hack/build.sh",[]string{}},
+				{"/bin/sh", []string{"-c", "pip install -r requirements.txt"}},
+				{"/src/hack/build.sh", []string{}},
 			},
 		},
 		{
 			name: "multi-stage",
-			df:   `
+			df: `
 FROM foo
 RUN date #rundev
 FROM bar
+RUN xyz 		# rundev
 RUN ["uname","-a"] #rundev`,
-			want: []cmd{{"uname", []string{"-a"}}},
+			want: []cmd{
+				{"/bin/sh", []string{"-c", "xyz"}},
+				{"uname", []string{"-a"}}},
 		},
 	}
 	for _, tt := range tests {
