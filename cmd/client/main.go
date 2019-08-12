@@ -33,16 +33,17 @@ const (
 )
 
 type remoteRunOpts struct {
-	syncDir  string
-	buildCmd []string
-	runCmd   []string
+	syncDir   string
+	runCmd    cmd
+	buildCmds []cmd
 }
 
 func init() {
 	flLocalDir = flag.String("local-dir", ".", "local directory to sync")
 	flRemoteDir = flag.String("remote-dir", "", "remote directory to sync (inside the container), defaults to container's WORKDIR")
 	flAddr = flag.String("addr", "localhost:8080", "network address to start the local proxy server")
-	flBuildCmd = flag.String("build-cmd", "", "(optional) command to re-build code (inside the container) after syncing")
+	flBuildCmd = flag.String("build-cmd", "", "(optional) command to re-build code (inside the container) after syncing,"+
+		"inferred from Dockerfile by default (add comment on RUN directives like #rundev")
 	flRunCmd = flag.String("run-cmd", "", "(optional) command to start application (inside the container) after syncing, inferred from Dockerfile by default")
 	flNoCloudRun = flag.Bool("no-cloudrun", false, "do not deploy to Cloud Run (you should start rundevd on localhost:8888)")
 	flCloudRunPlatform = flag.String("platform", "managed", "(passthrough to gcloud) managed or gke")
@@ -96,10 +97,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		var runCmd, buildCmd cmd
+		d, err := parseDockerfile(df)
+		if err != nil {
+			log.Fatalf("failed to parse Dockerfile: %+v", err)
+		}
+		var runCmd cmd
 		if *flRunCmd == "" {
-			runCmd, err = parseDockerfileEntrypoint(df)
+			runCmd, err = parseEntrypoint(d)
 			if err != nil {
 				log.Fatalf("failed to parse entrypoint/cmd from dockerfile. try specifying -run-cmd? error: %+v", err)
 			}
@@ -112,21 +116,32 @@ func main() {
 			runCmd = cmd{v[0], v[1:]}
 		}
 
+		var buildCmds []cmd
 		if *flBuildCmd == "" {
-			log.Printf("[info] -build-cmd not specified: if you have steps to build your code after syncing, use this flag")
+			blCmds := parseBuildCmds(d)
+			if len(blCmds) == 0 {
+				log.Printf("[info] -build-cmd not specified: if you have steps to build your code after syncing, use this flag")
+			} else {
+				log.Printf("[info] discovered build cmds (annotated with #rundev) from dockerfile as -build-cmd:")
+				for _, v := range blCmds {
+					log.Printf("-> %s", v)
+					buildCmds = append(buildCmds, v)
+				}
+			}
 		} else {
 			v, err := shlex.Split(*flBuildCmd)
 			if err != nil {
 				log.Fatalf("failed to parse -build-cmd into commands and args: %+v", err)
 			}
-			buildCmd = cmd{v[0], v[1:]}
-			log.Printf("[info] parsed -build-cmd as: %s", buildCmd)
+			vv := cmd{v[0], v[1:]}
+			log.Printf("[info] parsed -build-cmd as: %s", vv)
+			buildCmds = []cmd{vv}
 		}
 
 		ro := remoteRunOpts{
-			syncDir:  *flRemoteDir,
-			runCmd:   runCmd.List(),
-			buildCmd: buildCmd.List(),
+			syncDir:   *flRemoteDir,
+			runCmd:    runCmd,
+			buildCmds: buildCmds,
 		}
 		newEntrypoint := prepEntrypoint(ro)
 		log.Printf("[info] injecting to dockerfile:\n%s", regexp.MustCompile("(?m)^").ReplaceAllString(newEntrypoint, "\t"))

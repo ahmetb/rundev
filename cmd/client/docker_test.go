@@ -86,16 +86,86 @@ func Test_parseDockerfileEntrypoint(t *testing.T) {
 					CMD arg1 arg2`, // bad idea, user probably already gets an error from their original dockerfile
 			want: cmd{"/bin/sh", []string{"-c", "/bin/server foo bar", "/bin/sh", "-c", "arg1 arg2"}},
 		},
+		{
+			name: "multi stage (reset)",
+			df:   `FROM a1 AS c1
+ENTRYPOINT b
+CMD c d
+FROM a2 as c2
+ENTRYPOINT /bin/server`,
+			want: cmd{"/bin/sh", []string{"-c", "/bin/server"}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseDockerfileEntrypoint([]byte(tt.df))
+			df, err := parseDockerfile([]byte(tt.df))
+			if err != nil {
+				t.Fatalf("parsing dockerfile failed: %v", err)
+			}
+			got, err := parseEntrypoint(df)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseDockerfileEntrypoint() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("parseEntrypoint() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseDockerfileEntrypoint() got = %v, want %v", got, tt.want)
+				t.Errorf("parseEntrypoint() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_parseBuildCmds(t *testing.T) {
+	tests := []struct {
+		name string
+		df string
+		want []cmd
+	}{
+		{
+			name: "no run cmds",
+			df:   "FROM scratch",
+			want: nil,
+		},
+		{
+			name: "not annotated run cms",
+			df:   `FROM scratch
+RUN apt-get install \
+		-qqy \
+		a b c && rm -rf /tmp/foo`,
+			want: nil,
+		},
+		{
+			name: "some annotated run cmds",
+			df:   `
+FROM scratch
+#rundev
+RUN date
+RUN pip install -r requirements.txt # rundev
+RUN ["/src/hack/build.sh"] #rundev
+RUN date
+`,
+			want: []cmd{
+				{"/bin/sh", []string{"-c","pip install -r requirements.txt # rundev"}}, // https://github.com/moby/buildkit/issues/1127, parser is not trimming inline comments for non-json commands
+				{"/src/hack/build.sh",[]string{}},
+			},
+		},
+		{
+			name: "multi-stage",
+			df:   `
+FROM foo
+RUN date #rundev
+FROM bar
+RUN ["uname","-a"] #rundev`,
+			want: []cmd{{"uname", []string{"-a"}}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			df, err := parseDockerfile([]byte(tt.df))
+			if err != nil {
+				t.Fatalf("parsing dockerfile failed: %v", err)
+			}
+			if got := parseBuildCmds(df); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseBuildCmds() returned unexpected results:\ngot= %v\nwant=%v", got, tt.want)
 			}
 		})
 	}

@@ -10,13 +10,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
 )
 
 const (
-	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-1c761fc`
+	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-ce63840`
+)
+
+var (
+	runCmdAnnotationPattern = regexp.MustCompile(`#\s?rundev$`)
 )
 
 type buildOpts struct {
@@ -45,6 +50,10 @@ func (c cmd) List() []string {
 	return append([]string{c.cmd}, c.args...)
 }
 
+type dockerfile struct {
+	syntaxTree *parser.Node
+}
+
 func dockerBuildPush(ctx context.Context, opts buildOpts) error {
 	b, err := exec.CommandContext(ctx, "docker", "version").CombinedOutput()
 	if err != nil {
@@ -67,28 +76,32 @@ func dockerBuildPush(ctx context.Context, opts buildOpts) error {
 	return errors.Wrapf(err, "building docker image failed, output=%s", string(b))
 }
 
-func parseDockerfileEntrypoint(b []byte) (cmd, error) {
-	var c cmd
+func parseDockerfile(b []byte) (*dockerfile, error) {
 	r, err := parser.Parse(bytes.NewReader(b))
 	if err != nil {
-		return c, errors.Wrap(err, "error parsing dockerfile")
+		return nil, errors.Wrap(err, "error parsing dockerfile")
 	}
 	if r.AST == nil {
-		return c, errors.Wrap(err, "ast was nil")
+		return nil, errors.Wrap(err, "ast was nil")
 	}
+	return &dockerfile{r.AST}, nil
+}
 
+func parseEntrypoint(d *dockerfile) (cmd, error) {
+	var c cmd
 	var epVals, cmdVals []string
-	for _, stmt := range r.AST.Children {
+	for _, stmt := range d.syntaxTree.Children {
 		switch stmt.Value {
 		case "from":
-			c = cmd{} // reset (new stage)
+			// reset (new stage)
+			epVals = nil
+			cmdVals = nil
 		case "entrypoint":
 			epVals = parseCommand(stmt.Next, stmt.Attributes["json"])
 		case "cmd":
 			cmdVals = parseCommand(stmt.Next, stmt.Attributes["json"])
 		}
 	}
-
 	if len(epVals) == 0 && len(cmdVals) == 0 {
 		return c, errors.New("no CMD or ENTRYPOINT values in dockerfile")
 	}
@@ -98,6 +111,23 @@ func parseDockerfileEntrypoint(b []byte) (cmd, error) {
 	}
 	// merge ENTRYPOINT argv and CMD values
 	return cmd{epVals[0], append(epVals[1:], cmdVals...)}, nil
+}
+
+// parseBuildCmds extracts RUN commands from the last dockerfile stage with #rundev annotation.
+func parseBuildCmds(d *dockerfile) []cmd {
+	var out []cmd
+	for _, stmt := range d.syntaxTree.Children {
+		switch stmt.Value {
+		case "from":
+			out = nil // reset
+		case "run":
+			if runCmdAnnotationPattern.MatchString(stmt.Original) {
+				c := parseCommand(stmt.Next, stmt.Attributes["json"])
+				out=append(out, cmd{c[0],c[1:]})
+			}
+		}
+	}
+	return out
 }
 
 // parseCommand parses CMD and ENTRYPOINT nodes, based on whether they're JSON lists or not.
@@ -126,20 +156,18 @@ func readDockerfile(dir string) ([]byte, error) {
 }
 
 func prepEntrypoint(opts remoteRunOpts) string {
-	var buildCmdJSON, runCmdJSON string
-	v, _ := json.Marshal(opts.runCmd)
-	runCmdJSON = string(v)
-
-	if len(opts.buildCmd) > 0 {
-		v, _ = json.Marshal(opts.buildCmd)
-		buildCmdJSON = string(v)
-	}
-
+	rc, _ := json.Marshal(opts.runCmd.List())
 	cmd := []string{"rundevd",
 		"-addr=:8080",
-		"-run-cmd", runCmdJSON}
-	if len(opts.buildCmd) > 0 {
-		cmd = append(cmd, "-build-cmd", buildCmdJSON)
+		"-run-cmd", string(rc)}
+
+	if len(opts.buildCmds) > 0 {
+		bcs := make([][]string,len(opts.buildCmds))
+		for i,v:= range opts.buildCmds{
+			bcs[i]=v.List()
+		}
+		bc, _ := json.Marshal(bcs)
+		cmd = append(cmd, "-build-cmds", string(bc))
 	}
 	if opts.syncDir != "" {
 		cmd = append(cmd, "-sync-dir="+opts.syncDir)

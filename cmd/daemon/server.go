@@ -27,8 +27,8 @@ type cmd struct {
 
 type daemonOpts struct {
 	syncDir         string
-	runCmd          *cmd
-	buildCmd        *cmd
+	runCmd         *cmd
+	buildCmds       []cmd
 	childPort       int
 	portWaitTimeout time.Duration
 }
@@ -106,14 +106,14 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	srv.nannyLock.Lock()
 	if !srv.procNanny.Running() {
 		log.Printf("[reverse proxy] user process not running, restarting")
-		if srv.opts.buildCmd != nil {
-			log.Printf("[reverse proxy] building: %v", srv.opts.buildCmd)
-			bc := exec.Command(srv.opts.buildCmd.cmd, srv.opts.buildCmd.args...)
-			bc.Dir = srv.opts.syncDir
-			if b, err := bc.CombinedOutput(); err != nil {
+		for i, bc := range srv.opts.buildCmds {
+			log.Printf("[reverse proxy] executing build command (%d/%d): %v",i, len(srv.opts.buildCmds), bc)
+			cmd := exec.Command(bc.cmd, bc.args...)
+			cmd.Dir = srv.opts.syncDir
+			if b, err := cmd.CombinedOutput(); err != nil {
 				srv.nannyLock.Unlock()
-				writeProcError(w, fmt.Sprintf("executing -build-cmd failed: %+v", err), b) // TODO(ahmetb) client of this endpoint is not able to handle MIME type for procError
-				log.Printf("builded fail: %s", string(b))
+				log.Printf("build cmd failure: %s", string(b))
+				writeProcError(w, fmt.Sprintf("executing -build-cmd (%v) failed: %s", bc, err), b)
 				return
 			}
 			log.Print("rebuild succeeded")

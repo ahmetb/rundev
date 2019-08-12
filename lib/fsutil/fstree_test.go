@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+func TestWalk(t *testing.T) {
+	_, err := Walk("../..") // TODO remove
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 
 func Test_checksum(t *testing.T) {
 	f := func() FSNode {

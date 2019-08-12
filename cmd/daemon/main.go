@@ -13,7 +13,7 @@ import (
 
 var (
 	flRunCmd               string
-	flBuildCmd             string
+	flBuildCmds            string
 	flAddr                 string
 	flSyncDir              string
 	flChildPort            int
@@ -27,7 +27,7 @@ func init() {
 	}
 	flag.StringVar(&flSyncDir, "sync-dir", ".", "directory to sync")
 	flag.StringVar(&flAddr, "addr", listenAddr, "network address to start the daemon") // TODO(ahmetb): make this obey $PORT
-	flag.StringVar(&flBuildCmd, "build-cmd", "", "(JSON array encoded as string) command to rebuild the user app (inside the container)")
+	flag.StringVar(&flBuildCmds, "build-cmds", "", "(JSON encoded [][]string) commands to rebuild the user app (inside the container)")
 	flag.StringVar(&flRunCmd, "run-cmd", "", "(JSON array encoded as string) command to start the user app (inside the container)")
 	flag.IntVar(&flChildPort, "user-port", 5555, "PORT environment variable passed to the user app")
 	flag.DurationVar(&flProcessListenTimeout, "process-listen-timeout", time.Second*4, "time to wait for user app to listen on PORT")
@@ -70,21 +70,21 @@ func main() {
 	}
 	runCmd := &cmd{runCmds[0], runCmds[1:]}
 
-	var buildCmd *cmd
-	if flBuildCmd != "" {
-		var buildCmds []string
-		if err := json.Unmarshal([]byte(flBuildCmd), &buildCmds); err != nil {
-			log.Fatalf("failed to parse -build-cmd: %s", err)
-		} else if len(buildCmds) == 0 {
-			log.Fatal("-build-cmd parsed into zero tokens")
+	var buildCmds []cmd
+	if flBuildCmds != "" {
+		var bcs [][]string
+		if err := json.Unmarshal([]byte(flBuildCmds), &bcs); err != nil {
+			log.Fatalf("failed to parse -build-cmds: %s", err)
 		}
-		buildCmd = &cmd{buildCmds[0], buildCmds[1:]}
+		for _, v := range bcs {
+			buildCmds = append(buildCmds, cmd{v[0], v[1:]})
+		}
 	}
 
 	handler := newDaemonServer(daemonOpts{
 		syncDir:         flSyncDir,
 		runCmd:          runCmd,
-		buildCmd:        buildCmd,
+		buildCmds:       buildCmds,
 		childPort:       flChildPort,
 		portWaitTimeout: flProcessListenTimeout,
 	})
