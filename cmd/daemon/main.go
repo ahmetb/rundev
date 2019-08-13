@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"github.com/ramr/go-reaper"
 	"log"
 	"net/http"
 	"os"
@@ -37,9 +38,11 @@ func init() {
 }
 
 func main() {
+	log.Printf("rundevd running as pid %d", os.Getpid())
 	// TODO(ahmetb) instead of crashing the process on flag errors, consider serving error response type so it encourages a redeploy
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go reaper.Reap() // activates when PID 1
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt)
 	go func() {
