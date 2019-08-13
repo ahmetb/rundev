@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 )
 
 type localServerOpts struct {
@@ -72,7 +73,9 @@ func (srv *localServer) debugHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", checksum)
-	fmt.Fprintf(w, "opts: %# v\n", pretty.Formatter(srv.opts))
+	fmt.Fprintf(w, "pid: %d\n", os.Getpid())
+	wd, _ := os.Getwd()
+	fmt.Fprintf(w, "cwd: %s\n", wd)
 	fmt.Fprint(w, "sync:\n")
 	fmt.Fprintf(w, "  dir: %# v\n", pretty.Formatter(srv.opts.sync.opts.localDir))
 	fmt.Fprintf(w, "  target: %# v\n", pretty.Formatter(srv.opts.sync.opts.targetAddr))

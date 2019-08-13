@@ -1,0 +1,7 @@
+patchball
+=========
+
+patchball is a sample utility to test patch balls
+created from a local test directory with given config,
+used to manually verify the behavior, because I haven't
+written unit tests for these yet.

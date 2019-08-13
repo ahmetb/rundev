@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -200,6 +201,9 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
+	fmt.Fprintf(w, "pid: %d\n", os.Getpid())
+	wd, _ := os.Getwd()
+	fmt.Fprintf(w, "cwd: %s\n", wd)
 	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
 	fmt.Fprint(w, "opts:\n")
 	fmt.Fprintf(w, "  ignores: %# v\n", pretty.Formatter(srv.opts.ignores))
