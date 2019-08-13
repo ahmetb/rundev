@@ -51,7 +51,7 @@ func newReverseProxyHandler(addr string, sync *syncer) (http.Handler, error) {
 }
 
 func (srv *localServer) fsHandler(w http.ResponseWriter, req *http.Request) {
-	fs, err := fsutil.Walk(srv.opts.sync.opts.localDir)
+	fs, err := fsutil.Walk(srv.opts.sync.opts.localDir, srv.opts.sync.opts.ignores)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
@@ -73,7 +73,10 @@ func (srv *localServer) debugHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", checksum)
 	fmt.Fprintf(w, "opts: %# v\n", pretty.Formatter(srv.opts))
-	fmt.Fprintf(w, "sync opts: %# v\n", pretty.Formatter(srv.opts.sync.opts))
+	fmt.Fprint(w, "sync:\n")
+	fmt.Fprintf(w, "  dir: %# v\n", pretty.Formatter(srv.opts.sync.opts.localDir))
+	fmt.Fprintf(w, "  target: %# v\n", pretty.Formatter(srv.opts.sync.opts.targetAddr))
+	fmt.Fprintf(w, "  ignores: %# v\n", pretty.Formatter(srv.opts.sync.opts.ignores))
 }
 
 func (*localServer) unsupported(w http.ResponseWriter, req *http.Request) {

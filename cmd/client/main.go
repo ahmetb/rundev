@@ -78,13 +78,18 @@ func main() {
 
 	var fileIgnores *ignore.FileIgnores
 	var ignoreRules []string
-	if f, err := os.Open(filepath.Join(*flLocalDir, ".dockerignore")); err != nil {
+	if f, err := os.Open(filepath.Join(*flLocalDir, ".dockerignore")); err == nil {
 		defer f.Close()
-		rules, err := ignore.ParseDockerignore(f)
+		ignoreRules, err = ignore.ParseDockerignore(f)
 		if err != nil {
 			log.Fatalf("failed to parse .dockerignore: %+v", err)
 		}
-		fileIgnores = ignore.NewFileIgnores(rules)
+		fileIgnores = ignore.NewFileIgnores(ignoreRules)
+		log.Printf("[info] parsed %d rules from .dockerignore file", len(ignoreRules))
+	} else if os.IsNotExist(err) {
+		log.Printf("if there are files you don't want to sync, you can create a .dockerignore file")
+	} else {
+		log.Fatalf("failed attempt to read .dockerignore file: %+v", err)
 	}
 
 	var rundevdURL string

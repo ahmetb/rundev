@@ -6,12 +6,11 @@ import (
 )
 
 func TestWalk(t *testing.T) {
-	_, err := Walk("../..") // TODO remove
+	_, err := Walk("../..", nil) // TODO remove
 	if err != nil {
 		t.Fatal(err)
 	}
 }
-
 
 func Test_checksum(t *testing.T) {
 	f := func() FSNode {
@@ -76,7 +75,7 @@ func TestChecksumRoot(t *testing.T) {
 		Name:  "name1",
 		Mode:  1,
 		Size:  1,
-		Mtime: time.Unix(1,0),
+		Mtime: time.Unix(1, 0),
 		Nodes: nil,
 	}
 
@@ -92,12 +91,12 @@ func TestChecksumRoot(t *testing.T) {
 		t.Fatal("mode change was not supposed to trigger root checksum change")
 	}
 
-	fs.Size= 2
+	fs.Size = 2
 	if fs.RootChecksum() != c {
 		t.Fatal("size change was not supposed to trigger root checksum change")
 	}
 
-	fs.Nodes = append(fs.Nodes, FSNode{Name:"bar"})
+	fs.Nodes = append(fs.Nodes, FSNode{Name: "bar"})
 	if fs.RootChecksum() == c {
 		t.Fatal("nodes was supposed to trigger root checksum change")
 	}

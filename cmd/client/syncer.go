@@ -29,7 +29,7 @@ func newSyncer(opts syncOpts) *syncer {
 }
 
 func (s *syncer) checksum() (uint64, error) {
-	fs, err := fsutil.Walk(s.opts.localDir)
+	fs, err := fsutil.Walk(s.opts.localDir, s.opts.ignores)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to walk the local fs")
 	}
@@ -39,7 +39,7 @@ func (s *syncer) checksum() (uint64, error) {
 // uploadPatch creates and uploads a patch to remote endpoint to be
 // applied if it's currently at the given checksum.
 func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum string) error {
-	localFS, err := fsutil.Walk(s.opts.localDir)
+	localFS, err := fsutil.Walk(s.opts.localDir, s.opts.ignores)
 	if err != nil {
 		return errors.Wrapf(err, "failed to walk local fs dir %s", s.opts.localDir)
 	}

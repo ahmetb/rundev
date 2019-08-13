@@ -114,7 +114,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	fs, err := fsutil.Walk(srv.opts.syncDir)
+	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
 	if err != nil {
 		writeErrorResp(w, http.StatusInternalServerError, errors.Wrap(err, "failed to walk the sync directory"))
 		return
@@ -172,7 +172,7 @@ func (srv *daemonServer) restart(w http.ResponseWriter, req *http.Request) {
 }
 
 func (srv *daemonServer) fsHandler(w http.ResponseWriter, req *http.Request) {
-	fs, err := fsutil.Walk(srv.opts.syncDir)
+	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
@@ -194,14 +194,18 @@ func (srv *daemonServer) logsHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request) {
-	fs, err := fsutil.Walk(srv.opts.syncDir)
+	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
 	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
-	fmt.Fprintf(w, "opts: %# v\n", pretty.Formatter(srv.opts))
+	fmt.Fprint(w, "opts:\n")
+	fmt.Fprintf(w, "  ignores: %# v\n", pretty.Formatter(srv.opts.ignores))
+	fmt.Fprintf(w, "  run-cmd: %# v\n", pretty.Formatter(srv.opts.runCmd))
+	fmt.Fprintf(w, "  build-cmds: %# v\n", pretty.Formatter(srv.opts.buildCmds))
+	fmt.Fprintf(w, "  port wait timeout: %# v\n", pretty.Formatter(srv.opts.portWaitTimeout))
 }
 
 func (*daemonServer) unsupported(w http.ResponseWriter, req *http.Request) {
@@ -236,7 +240,7 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fs, err := fsutil.Walk(srv.opts.syncDir)
+	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Errorf("failed to fetch local filesystem: %+v", err)

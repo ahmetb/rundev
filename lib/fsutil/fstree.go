@@ -3,6 +3,7 @@ package fsutil
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/ahmetb/rundev/lib/ignore"
 	"hash/fnv"
 	"io/ioutil"
 	"os"
@@ -64,7 +65,7 @@ func (f FSNode) childrenChecksum() uint64 {
 	return h.Sum64()
 }
 
-func Walk(dir string) (FSNode, error) {
+func Walk(dir string, rules *ignore.FileIgnores) (FSNode, error) {
 	fi, err := os.Stat(dir)
 	if err != nil {
 		return FSNode{}, errors.Wrapf(err, "failed to open directory %s", dir)
@@ -73,12 +74,12 @@ func Walk(dir string) (FSNode, error) {
 		return FSNode{}, errors.Errorf("path %s is not a directory", dir)
 	}
 
-	n, err := walkFile(dir, fi)
+	n, err := walkFile(dir, dir, fi, rules)
 	n.Name = "$root" // value doesn't matter, but should be the same on local vs remote as we don't care about dir basename
 	return n, errors.Wrap(err, "failed to traverse directory tree")
 }
 
-func walkFile(path string, fi os.FileInfo) (FSNode, error) {
+func walkFile(root, path string, fi os.FileInfo, rules *ignore.FileIgnores) (FSNode, error) {
 	n := FSNode{
 		Name:  fi.Name(),
 		Mode:  fi.Mode(),
@@ -99,7 +100,12 @@ func walkFile(path string, fi os.FileInfo) (FSNode, error) {
 		n.Nodes = make([]FSNode, 0, len(children))
 	}
 	for _, f := range children {
-		v, err := walkFile(filepath.Join(path, f.Name()), f)
+		childPath := filepath.Join(path, f.Name())
+		rel, _ := filepath.Rel(root, childPath)
+		if rules.Ignored(rel) {
+			continue
+		}
+		v, err := walkFile(root, childPath, f, rules)
 		if err != nil {
 			return FSNode{}, err
 		}
