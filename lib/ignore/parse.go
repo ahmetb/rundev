@@ -1,11 +1,9 @@
 package ignore
 
 import (
-	"github.com/bmatcuk/doublestar"
 	"github.com/docker/docker/builder/dockerignore"
 	"github.com/pkg/errors"
 	"io"
-	"path/filepath"
 	"strings"
 )
 
@@ -32,23 +30,4 @@ func ParseDockerignore(r io.Reader) ([]string, error) {
 		}
 	}
 	return v, nil
-}
-
-// Ignored checks if the path (OS-dependent file separator) matches one of the exclusion rules (that are in dockerignore format).
-func Ignored(path string, exclusions []string) bool {
-	unixPath := filepath.ToSlash(path)
-	for _, p := range exclusions {
-		ok, _ := pathMatch(unixPath, p) // ignore error as it's checked as part of parsing the pattern
-		if ok {
-			return true
-		}
-	}
-	return false
-}
-
-// pathMatch checks if given path with forward slashes matches the dockerignore pattern.
-// This supports double star (**) globbing, and patterns with leading slash (/).
-func pathMatch(unixPath string, pattern string) (bool, error) {
-	pattern = strings.TrimPrefix(pattern, "/") // .dockerignore supports /a/b format, but we just need to make it relative.
-	return doublestar.Match(pattern, unixPath)
 }

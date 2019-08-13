@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/google/shlex"
 	"github.com/google/uuid"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"time"
 )
@@ -74,12 +76,23 @@ func main() {
 		}
 	}
 
+	var fileIgnores *ignore.FileIgnores
+	var ignoreRules []string
+	if f, err := os.Open(filepath.Join(*flLocalDir, ".dockerignore")); err != nil {
+		defer f.Close()
+		rules, err := ignore.ParseDockerignore(f)
+		if err != nil {
+			log.Fatalf("failed to parse .dockerignore: %+v", err)
+		}
+		fileIgnores = ignore.NewFileIgnores(rules)
+	}
+
 	var rundevdURL string
 	if *flNoCloudRun {
 		rundevdURL = localRundevdURL
 		log.Printf("not deploying to Cloud Run. make sure to start rundevd at %s", rundevdURL)
 	} else {
-		log.Printf("starting one-time build & push & deploy")
+		log.Printf("starting one-time \"build & push & deploy\" to Cloud Run")
 		project, err := currentProject(ctx)
 		if err != nil {
 			log.Fatalf("error reading current project ID from gcloud: %+v", err)
@@ -139,6 +152,7 @@ func main() {
 			runCmd:       runCmd,
 			buildCmds:    buildCmds,
 			clientSecret: clientSecret,
+			ignoreRules:  ignoreRules, // TODO(ahmetb) use this
 		}
 		newEntrypoint := prepEntrypoint(ro)
 		log.Printf("[info] injecting to dockerfile:\n%s", regexp.MustCompile("(?m)^").ReplaceAllString(newEntrypoint, "\t"))
@@ -172,6 +186,7 @@ func main() {
 		localDir:     *flLocalDir,
 		targetAddr:   rundevdURL,
 		clientSecret: clientSecret,
+		ignores:      fileIgnores,
 	})
 	localServerHandler, err := newLocalServer(localServerOpts{
 		proxyTarget: rundevdURL,

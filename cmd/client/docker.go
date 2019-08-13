@@ -30,6 +30,7 @@ type remoteRunOpts struct {
 	runCmd       cmd
 	buildCmds    []cmd
 	clientSecret string
+	ignoreRules  []string
 }
 
 type buildOpts struct {
@@ -184,6 +185,10 @@ func prepEntrypoint(opts remoteRunOpts) string {
 		}
 		bc, _ := json.Marshal(bcs)
 		cmd = append(cmd, "-build-cmds", string(bc))
+	}
+	if len(opts.ignoreRules) > 0 {
+		b, _ := json.Marshal(opts.ignoreRules)
+		cmd = append(cmd, "-ignore-patterns", string(b))
 	}
 	if opts.syncDir != "" {
 		cmd = append(cmd, "-sync-dir="+opts.syncDir)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/ahmetb/rundev/lib/fsutil"
+	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
@@ -16,6 +17,7 @@ type syncOpts struct {
 	localDir     string
 	targetAddr   string
 	clientSecret string
+	ignores      *ignore.FileIgnores
 }
 
 type syncer struct {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/ahmetb/rundev/lib/fsutil"
+	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"io"
@@ -32,6 +33,7 @@ type daemonOpts struct {
 	runCmd          *cmd
 	buildCmds       []cmd
 	childPort       int
+	ignores         *ignore.FileIgnores
 	portWaitTimeout time.Duration
 }
 
@@ -78,7 +80,7 @@ func withClientSecretAuth(secret string, hand http.HandlerFunc) http.HandlerFunc
 	if secret == "" {
 		return hand
 	}
-	return func(w http.ResponseWriter, req *http.Request){
+	return func(w http.ResponseWriter, req *http.Request) {
 		h := req.Header.Get(constants.HdrRundevClientSecret)
 		if h == "" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -89,7 +91,7 @@ func withClientSecretAuth(secret string, hand http.HandlerFunc) http.HandlerFunc
 			fmt.Fprintf(w, "client secret (%s header) on the request not matching the one configured on the daemon", constants.HdrRundevClientSecret)
 			return
 		}
-		hand(w,req)
+		hand(w, req)
 	}
 }
 

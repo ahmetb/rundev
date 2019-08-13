@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/ramr/go-reaper"
 	"log"
 	"net/http"
@@ -18,6 +19,7 @@ var (
 	flAddr                 string
 	flSyncDir              string
 	flClientSecret         string
+	flIgnorePatterns       string
 	flChildPort            int
 	flProcessListenTimeout time.Duration
 )
@@ -32,6 +34,7 @@ func init() {
 	flag.StringVar(&flAddr, "addr", listenAddr, "network address to start the daemon")
 	flag.StringVar(&flBuildCmds, "build-cmds", "", "(JSON encoded [][]string) commands to rebuild the user app (inside the container)")
 	flag.StringVar(&flRunCmd, "run-cmd", "", "(JSON array encoded as string) command to start the user app (inside the container)")
+	flag.StringVar(&flIgnorePatterns, "ignore-patterns", "", "(JSON array encoded as string) exclusion rules in .dockerignore")
 	flag.IntVar(&flChildPort, "user-port", 5555, "PORT environment variable passed to the user app")
 	flag.DurationVar(&flProcessListenTimeout, "process-listen-timeout", time.Second*4, "time to wait for user app to listen on PORT")
 	flag.Parse()
@@ -86,6 +89,11 @@ func main() {
 		}
 	}
 
+	var ignorePatterns []string
+	if err := json.Unmarshal([]byte(flIgnorePatterns), &ignorePatterns); err != nil {
+		log.Fatalf("failed to parse -ignore-patterns: %v", err)
+	}
+
 	handler := newDaemonServer(daemonOpts{
 		clientSecret:    flClientSecret,
 		syncDir:         flSyncDir,
@@ -93,6 +101,7 @@ func main() {
 		buildCmds:       buildCmds,
 		childPort:       flChildPort,
 		portWaitTimeout: flProcessListenTimeout,
+		ignores:         ignore.NewFileIgnores(ignorePatterns),
 	})
 
 	localServer := http.Server{
