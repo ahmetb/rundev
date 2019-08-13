@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/ahmetb/rundev/lib/fsutil"
+	"github.com/ahmetb/rundev/lib/ignore"
 	"io"
 	"io/ioutil"
 	"log"
@@ -12,13 +13,15 @@ import (
 )
 
 var (
-	flOps string
-	flDir string
+	flOps          string
+	flDir          string
+	flDockerignore string
 )
 
 func init() {
 	flag.StringVar(&flOps, "ops-file", "", "json array file containing diff ops")
 	flag.StringVar(&flDir, "dir", ".", "directory to look files for")
+	flag.StringVar(&flDockerignore, "dockerignore", "", "specify path to parse dockerignore rules")
 	flag.Parse()
 }
 
@@ -29,6 +32,22 @@ func main() {
 	} else if flDir == "" {
 		log.Fatal("-dir is empty")
 	}
+
+	var ignores *ignore.FileIgnores
+	if flDockerignore != "" {
+		f, err := os.Open(flDockerignore)
+		if err != nil {
+			log.Fatalf("failed to open -dockerignore: %+v", err)
+		}
+		defer f.Close()
+		r, err := ignore.ParseDockerignore(f)
+		if err != nil {
+			log.Fatalf("failed to parse -dockerignore: %+v", err)
+		}
+		ignores = ignore.NewFileIgnores(r)
+		log.Printf("info: parsed %d ignore rules", len(r))
+	}
+
 	var ops []fsutil.DiffOp
 	for _, op := range ops {
 		fmt.Fprintf(os.Stderr, "%v\n", op)
@@ -41,7 +60,7 @@ func main() {
 		log.Fatalf("unmarshal error")
 	}
 
-	tar, _, err := fsutil.PatchArchive(flDir, ops)
+	tar, _, err := fsutil.PatchArchive(flDir, ops, ignores)
 	if err != nil {
 		log.Fatalf("error creating patch archive: %+v", err)
 	}

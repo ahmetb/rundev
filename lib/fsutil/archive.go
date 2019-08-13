@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"github.com/ahmetb/rundev/lib/constants"
+	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
@@ -13,7 +14,7 @@ import (
 )
 
 // PatchArchive creates a tarball for given operations in baseDir and returns its size.
-func PatchArchive(baseDir string, ops []DiffOp) (io.Reader, int, error) {
+func PatchArchive(baseDir string, ops []DiffOp, ignores *ignore.FileIgnores) (io.Reader, int, error) {
 	var b bytes.Buffer
 	gw, err := gzip.NewWriterLevel(&b, gzip.BestSpeed)
 	if err != nil {
@@ -21,7 +22,7 @@ func PatchArchive(baseDir string, ops []DiffOp) (io.Reader, int, error) {
 	}
 	tw := tar.NewWriter(gw)
 
-	files, err := normalizeFiles(baseDir, ops)
+	files, err := normalizeFiles(baseDir, ops, ignores)
 	if err != nil {
 		return nil, -1, errors.Wrap(err, "failed to normalize file list")
 	}
@@ -73,7 +74,7 @@ type archiveFile struct {
 // normalizeFiles returns all list of files that should be added to the archive
 // by creating whiteout files (indicating deletions, and empty dir placeholders),
 // and recursively traversing directories to be added.
-func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
+func normalizeFiles(baseDir string, ops []DiffOp, ignores *ignore.FileIgnores) ([]archiveFile, error) {
 	var out []archiveFile
 	for _, op := range ops {
 		fullPath := filepath.Join(baseDir, filepath.FromSlash(op.Path))
@@ -90,6 +91,10 @@ func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
 				return nil, errors.Wrapf(err, "failed to stat file %s for tar-ing", fullPath)
 			}
 
+			if ignores.Ignored(op.Path) {
+				continue
+			}
+
 			if !fi.IsDir() {
 				out = append(out, archiveFile{
 					fullPath:    fullPath,
@@ -103,13 +108,16 @@ func normalizeFiles(baseDir string, ops []DiffOp) ([]archiveFile, error) {
 					return nil, err
 				}
 				for _, f := range files {
-					extractPath, err := filepath.Rel(baseDir, f.fullPath)
+					relPath, err := filepath.Rel(baseDir, f.fullPath)
 					if err != nil {
 						return nil, errors.Wrapf(err, "failed to calculate relative path (%s and %s)", baseDir, f.fullPath)
 					}
+					if ignores.Ignored(relPath) {
+						continue
+					}
 					out = append(out, archiveFile{
 						fullPath:    f.fullPath,
-						extractPath: extractPath,
+						extractPath: relPath,
 						stat:        nanosecMaskingStat{f.stat},
 					})
 				}

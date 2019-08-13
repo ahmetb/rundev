@@ -52,7 +52,7 @@ func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum strin
 		log.Printf("  %s", v)
 	}
 
-	tar, n, err := fsutil.PatchArchive(s.opts.localDir, diff)
+	tar, n, err := fsutil.PatchArchive(s.opts.localDir, diff, s.opts.ignores)
 	if err != nil {
 		return err
 	}

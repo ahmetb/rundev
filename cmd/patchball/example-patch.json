@@ -1,22 +1,18 @@
 [
   {
-    "Type": 0,
-    "Path": "app.py"
+    "Type": 1,
+    "Path": ".git"
   },
   {
     "Type": 0,
-    "Path": "LICENSE"
+    "Path": "Dockerfile"
+  },
+  {
+    "Type": 0,
+    "Path": "Dockerfile.foo"
   },
   {
     "Type": 0,
     "Path": "foo"
-  },
-  {
-    "Type": 0,
-    "Path": "nest1"
-  },
-  {
-    "Type": 0,
-    "Path": "now-dir"
   }
 ]
