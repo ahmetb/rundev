@@ -4,9 +4,15 @@ Sub-second inner-loop iterations for containers running on Google Cloud Run.
 
 Installation
 ------------
-You need to check out the source code and build using Go:
 
-     go build -o ./rundev ./cmd/client
+For now you need "go" version >1.12 to download the rundev client:
+
+     go get github.com/ahmetb/rundev/cmd/client
+     mv ~/go/bin/{client,rundev}
+
+Make sure ~/go/bin is in your PATH. You can verify installation by running:
+
+     rundev -h
 
 Start developing
 ---------------
@@ -17,14 +23,19 @@ For an application that picks up new source code by restarting, just run:
 
     rundev
 
-For an application that needs a build step, specify a build command like:
+For an application that needs a build step after syncing the new code, you can
+specify a build command like:
 
     rundev -build-cmd 'go build -o /out/server .'
 
+Or simply you can annotate your RUN directive with a "# rundev" comment like:
+
+    RUN go build -o /out/server . # rundev
+
 This command will:
 
-  1. in-memory overwrite your Dockerfile to install and run /bin/rundevd daemon
-     which wraps your original ENTRYPOINT/CMD.
+  1. in-memory overwrite your Dockerfile to install and run the "rundevd"
+     daemon which is an harness around your original ENTRYPOINT/CMD.
   2. build and push a container image to your project
   2. deploy your app to Cloud Run
   3. start a local HTTP server on localhost:8080 for development.
