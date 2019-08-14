@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/ahmetb/rundev/lib/fsutil"
+	"github.com/ahmetb/rundev/lib/handlerutil"
 	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/google/uuid"
 	"github.com/kr/pretty"
@@ -68,12 +69,12 @@ func newDaemonServer(opts daemonOpts) http.Handler {
 		Host:   "localhost:" + strconv.Itoa(opts.childPort)})
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/rundevd/fsz", r.fsHandler)
+	mux.HandleFunc("/rundevd/fsz", handlerutil.NewFSDebugHandler(r.opts.syncDir, r.opts.ignores))
 	mux.HandleFunc("/rundevd/debugz", r.statusHandler)
 	mux.HandleFunc("/rundevd/procz", r.logsHandler)
 	mux.HandleFunc("/rundevd/restart", r.restart)
 	mux.HandleFunc("/rundevd/patch", withClientSecretAuth(opts.clientSecret, r.patch))
-	mux.HandleFunc("/rundevd/", r.unsupported) // prevent proxying daemon debug endpoints to user app
+	mux.HandleFunc("/rundevd/", handlerutil.NewUnsupportedDebugEndpointHandler())
 	mux.HandleFunc("/", r.reverseProxyHandler)
 	return mux
 }
@@ -183,21 +184,6 @@ func (srv *daemonServer) restart(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "ok")
 }
 
-func (srv *daemonServer) fsHandler(w http.ResponseWriter, req *http.Request) {
-	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Errorf("failed to fetch local filesystem: %+v", err)
-		return
-	}
-	w.Header().Set(constants.HdrRundevChecksum, fmt.Sprintf("%v", fs.RootChecksum()))
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(fs); err != nil {
-		log.Printf("ERROR: failed to encode json: %+v", err)
-	}
-}
-
 func (srv *daemonServer) logsHandler(w http.ResponseWriter, req *http.Request) {
 	srv.nannyLock.Lock()
 	defer srv.nannyLock.Unlock()
@@ -221,11 +207,6 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 	fmt.Fprintf(w, "  run-cmd: %# v\n", pretty.Formatter(srv.opts.runCmd))
 	fmt.Fprintf(w, "  build-cmds: %# v\n", pretty.Formatter(srv.opts.buildCmds))
 	fmt.Fprintf(w, "  port wait timeout: %# v\n", pretty.Formatter(srv.opts.portWaitTimeout))
-}
-
-func (*daemonServer) unsupported(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprintf(w, "unsupported rundev daemon endpoint %s", req.URL.Path)
 }
 
 func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
