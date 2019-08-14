@@ -9,6 +9,7 @@ import (
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/ahmetb/rundev/lib/fsutil"
 	"github.com/ahmetb/rundev/lib/ignore"
+	"github.com/google/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"io"
@@ -44,7 +45,7 @@ type daemonServer struct {
 	portCheck    portChecker
 
 	procLogs  *bytes.Buffer
-	patchLock sync.Mutex
+	patchLock sync.RWMutex
 
 	nannyLock sync.Mutex
 	procNanny nanny
@@ -102,7 +103,17 @@ func newReverseProxy(target *url.URL) http.Handler {
 }
 
 func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Request) {
-	log.Printf("[reverse proxy] path=%s method=%s", req.URL.Path, req.Method)
+	srv.patchLock.RLock()
+	defer srv.patchLock.RUnlock()
+
+	id := uuid.New().String()
+	rr := &responseRecorder{rw: w}
+	w = rr
+	start := time.Now()
+	log.Printf("[rev proxy] request %s accepted: path=%s method=%s", id, req.URL.Path, req.Method)
+	defer func() {
+		log.Printf("[rev proxy] request %s complete: path=%s status=%d took=%v", id, req.URL.Path, rr.statusCode, time.Since(start))
+	}()
 
 	reqChecksumHdr := req.Header.Get(constants.HdrRundevChecksum)
 	if reqChecksumHdr == "" {
@@ -129,9 +140,9 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	}
 	srv.nannyLock.Lock()
 	if !srv.procNanny.Running() {
-		log.Printf("[reverse proxy] user process not running, restarting")
+		log.Printf("[rev proxy] user process not running, restarting")
 		for i, bc := range srv.opts.buildCmds {
-			log.Printf("[reverse proxy] executing build command (%d/%d): %v", i, len(srv.opts.buildCmds), bc)
+			log.Printf("[rev proxy] executing build command (%d/%d): %v", i, len(srv.opts.buildCmds), bc)
 			cmd := exec.Command(bc.cmd, bc.args...)
 			cmd.Dir = srv.opts.syncDir
 			if b, err := cmd.CombinedOutput(); err != nil {
@@ -159,7 +170,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		writeProcError(w, fmt.Sprintf("child process did not start listening on $PORT (%d) in %v", srv.opts.childPort, srv.opts.portWaitTimeout), srv.procLogs.Bytes())
 		return
 	}
-
+	log.Printf("app port ready")
 	srv.reverseProxy.ServeHTTP(w, req)
 }
 
@@ -218,10 +229,6 @@ func (*daemonServer) unsupported(w http.ResponseWriter, req *http.Request) {
 }
 
 func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
-	srv.patchLock.Lock()
-	defer srv.patchLock.Unlock()
-	// TODO would be good to stop accepting new requests during this period
-
 	if req.Method != http.MethodPatch {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -231,18 +238,23 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	incomingChecksum := req.Header.Get(constants.HdrRundevChecksum)
-	if incomingChecksum == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "patch request did not contain %s header", constants.HdrRundevChecksum)
-		return
-	}
 	expectedLocalChecksum := req.Header.Get(constants.HdrRundevPatchPreconditionSum)
 	if expectedLocalChecksum == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "patch request did not contain %s header", constants.HdrRundevPatchPreconditionSum)
 		return
 	}
+
+	incomingChecksum := req.Header.Get(constants.HdrRundevChecksum)
+	if incomingChecksum == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "patch request did not contain %s header", constants.HdrRundevChecksum)
+		return
+	}
+
+	// stop accepting new proxy or patch requests while potentially modifying fs
+	srv.patchLock.Lock()
+	defer srv.patchLock.Unlock()
 
 	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
 	if err != nil {
@@ -268,9 +280,12 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "failed to uncompress patch tar: %+v", err)
 		return
 	}
+	log.Printf("patch applied")
 
 	srv.nannyLock.Lock()
 	srv.procNanny.Kill() // restart the process on next proxied request
+	// TODO(ahmetb) ensure port goes down before calling it dead as some indirect subprocesses may exit late?
+	log.Printf("existing proc killed after patch")
 	srv.nannyLock.Unlock()
 
 	w.WriteHeader(http.StatusAccepted)
@@ -307,4 +322,17 @@ func writeChecksumMismatchResp(w http.ResponseWriter, fs fsutil.FSNode) {
 		log.Printf("WARNING: %+v", errors.Wrap(err, "error while marshaling remote fs"))
 	}
 	io.Copy(w, &b)
+}
+
+type responseRecorder struct {
+	rw         http.ResponseWriter
+	statusCode int
+}
+
+func (rr *responseRecorder) Header() http.Header         { return rr.rw.Header() }
+func (rr *responseRecorder) Write(b []byte) (int, error) { return rr.rw.Write(b) }
+
+func (rr *responseRecorder) WriteHeader(statusCode int) {
+	rr.statusCode = statusCode
+	rr.rw.WriteHeader(statusCode)
 }

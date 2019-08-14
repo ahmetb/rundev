@@ -134,7 +134,7 @@ func main() {
 		if *flBuildCmd == "" {
 			blCmds := parseBuildCmds(d)
 			if len(blCmds) == 0 {
-				log.Printf("[info] -build-cmd not specified: if you have steps to build your code after syncing, use this flag")
+				log.Printf("[info] -build-cmd not specified: if you have steps to build your code after syncing, use this flag, or add #rundev comment to RUN statements in your Dockerfile")
 			} else {
 				log.Printf("[info] discovered build cmds (annotated with #rundev) from dockerfile as -build-cmd:")
 				for _, v := range blCmds {
