@@ -90,9 +90,12 @@ func main() {
 	}
 
 	var ignorePatterns []string
-	if err := json.Unmarshal([]byte(flIgnorePatterns), &ignorePatterns); err != nil {
-		log.Fatalf("failed to parse -ignore-patterns: %v", err)
+	if flIgnorePatterns != "" {
+		if err := json.Unmarshal([]byte(flIgnorePatterns), &ignorePatterns); err != nil {
+			log.Fatalf("failed to parse -ignore-patterns: %v", err)
+		}
 	}
+
 
 	handler := newDaemonServer(daemonOpts{
 		clientSecret:    flClientSecret,

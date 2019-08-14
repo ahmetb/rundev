@@ -31,6 +31,7 @@ func withSyncingRoundTripper(next http.RoundTripper, sync *syncer, host string) 
 }
 
 func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	log.Printf("[reverse proxy] request received path=%s method=%s", req.URL.Path, req.Method)
 	localChecksum, err := s.sync.checksum()
 	if err != nil {
 		return nil, err
