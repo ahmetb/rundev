@@ -15,7 +15,7 @@ import (
 type nanny interface {
 	Running() bool
 	Restart() error // starts if not running
-	Kill()
+	Kill() int
 }
 
 type procNanny struct {
@@ -48,8 +48,8 @@ func (p *procNanny) Running() bool {
 	return p.active
 }
 
-func (p *procNanny) Kill() {
-	p.kill()
+func (p *procNanny) Kill() int {
+	return p.kill()
 }
 
 func (p *procNanny) Restart() error {
@@ -57,12 +57,14 @@ func (p *procNanny) Restart() error {
 }
 
 // kill sends a SIGKILL to the process if it's running.
-func (p *procNanny) kill() {
+func (p *procNanny) kill() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	var pid int
+
 	if p.proc != nil {
-		pid := -p.proc.Pid  // negative value: ID of process group
+		pid = -p.proc.Pid // negative value: ID of process group
 		log.Printf("killing pid %d", pid)
 		// TODO using negative PID (pgrp kill) not working on gVisor
 		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
@@ -71,14 +73,6 @@ func (p *procNanny) kill() {
 			log.Printf("killed pid %d", pid)
 		}
 
-		//// TODO until we can get negative PID kills working, kill every process except self and 1
-		//ps, _ := pstree.New()
-		//for pp := range ps.Procs {
-		//	if pp != os.Getpid() && pp != 1 {
-		//		log.Printf("found pid=%d, killing", pp)
-		//		syscall.Kill(pp, syscall.SIGKILL)
-		//	}
-		//}
 		p.proc.Release()
 		p.proc = nil
 	}
@@ -86,6 +80,7 @@ func (p *procNanny) kill() {
 	if p.opts.logs != nil {
 		p.opts.logs.Reset()
 	}
+	return pid
 }
 
 func (p *procNanny) replace() error {

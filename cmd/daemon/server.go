@@ -238,7 +238,8 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 	log.Printf("patch applied")
 
 	srv.nannyLock.Lock()
-	srv.procNanny.Kill() // restart the process on next proxied request
+	pid := srv.procNanny.Kill() // restart the process on next proxied request
+	log.Printf("killed pid %d after patch", pid)
 	// TODO(ahmetb) ensure port goes down before calling it dead as some indirect subprocesses may exit late?
 	log.Printf("existing proc killed after patch")
 	srv.nannyLock.Unlock()
@@ -273,7 +274,8 @@ func (srv *daemonServer) killHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	srv.nannyLock.Lock()
-	srv.procNanny.Kill()
+	pid := srv.procNanny.Kill()
+	fmt.Fprintf(w, "killed %d", pid)
 	srv.nannyLock.Unlock()
 }
 
