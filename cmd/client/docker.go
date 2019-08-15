@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-62a2874-dirty?`
+	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-b3b14c5`
 )
 
 var (
