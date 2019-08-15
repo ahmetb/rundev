@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-38cea4b`
+	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-a4df374-dirty`
+	tiniURL    = `https://github.com/krallin/tini/releases/download/v0.18.0/tini-static`
 )
 
 var (
@@ -174,7 +175,7 @@ func readDockerfile(dir string) ([]byte, error) {
 
 func prepEntrypoint(opts remoteRunOpts) string {
 	rc, _ := json.Marshal(opts.runCmd.List())
-	cmd := []string{"rundevd",
+	cmd := []string{"/bin/rundevd",
 		"-client-secret=" + opts.clientSecret,
 		"-run-cmd", string(rc)}
 
@@ -194,16 +195,18 @@ func prepEntrypoint(opts remoteRunOpts) string {
 		cmd = append(cmd, "-sync-dir="+opts.syncDir)
 	}
 	sw := new(strings.Builder)
+	fmt.Fprintf(sw, "ADD %s /bin/tini\n", tiniURL)
+	fmt.Fprintln(sw, "RUN chmod +x /bin/tini")
 	fmt.Fprintf(sw, "ADD %s /bin/rundevd\n", rundevdURL)
-	fmt.Fprint(sw, "RUN chmod +x /bin/rundevd\n")
-	sw.WriteString("ENTRYPOINT [")
+	fmt.Fprintln(sw, "RUN chmod +x /bin/rundevd")
+	fmt.Fprintln(sw, `ENTRYPOINT ["/bin/tini", "--"]`)
+	sw.WriteString("CMD [")
 	for i, a := range cmd {
 		fmt.Fprintf(sw, "%q", a)
 		if i != len(cmd)-1 {
-			sw.WriteString(", \\\n\t\t")
+			sw.WriteString(", \\\n\t")
 		}
 	}
 	sw.WriteString(`]`)
-	sw.WriteString("\nCMD []")
 	return sw.String()
 }
