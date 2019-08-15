@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type syncingRoundTripper struct {
@@ -31,6 +32,7 @@ func withSyncingRoundTripper(next http.RoundTripper, sync *syncer, host string) 
 }
 
 func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
 	log.Printf("[reverse proxy] request received path=%s method=%s", req.URL.Path, req.Method)
 	localChecksum, err := s.sync.checksum()
 	if err != nil {
@@ -55,6 +57,9 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		req.Header.Set("Host", s.hostHdr)
 
 		// round-trip the request
+		if retry != 0 {
+			log.Printf("[reverse proxy] repeating request n=%d path=%s method=%s", retry, req.URL.Path, req.Method)
+		}
 		resp, err := s.next.RoundTrip(req)
 		if err != nil {
 			return nil, err // TODO(ahmetb) returning err from roundtrip method is not surfacing the error message in the response body, and prints a log to stderr by net/http's internal logger
@@ -90,7 +95,7 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 				continue
 			}
 		default:
-			log.Printf("[reverse proxy] request completed on retry=%d path=%s status=%d (%s)", retry, req.URL.Path, resp.StatusCode, resp.Header.Get("content-type"))
+			log.Printf("[reverse proxy] request completed on retry=%d path=%s status=%d took=%v (%s)", retry, req.URL.Path, resp.StatusCode, time.Since(start), resp.Header.Get("content-type"))
 			return resp, nil
 		}
 	}

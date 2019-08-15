@@ -56,7 +56,7 @@ func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum strin
 	if err != nil {
 		return err
 	}
-	log.Printf("diff tarball %d bytes", n)
+	log.Printf("patch tarball is %d bytes. applying the patch.", n)
 
 	url := s.opts.targetAddr + "/rundevd/patch"
 	req, err := http.NewRequest(http.MethodPatch, url, tar)
@@ -78,6 +78,7 @@ func (s *syncer) uploadPatch(remoteFS fsutil.FSNode, currentRemoteChecksum strin
 		return errors.Errorf("unexpected patch response status=%d (was expecting http %d) (new remote checksum: %s, old remote checksum: %s, local: %d). response body: %s",
 			resp.StatusCode, expected, newRemoteChecksum, currentRemoteChecksum, localChecksum, string(b))
 	}
+	log.Printf("patch applied (new remote checksum: %d)", localChecksum)
 	return nil
 }
 

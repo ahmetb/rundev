@@ -235,13 +235,11 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "failed to uncompress patch tar: %+v", err)
 		return
 	}
-	log.Printf("patch applied")
+	log.Printf("patch applied, killing process")
 
 	srv.nannyLock.Lock()
 	pid := srv.procNanny.Kill() // restart the process on next proxied request
 	log.Printf("killed pid %d after patch", pid)
-	// TODO(ahmetb) ensure port goes down before calling it dead as some indirect subprocesses may exit late?
-	log.Printf("existing proc killed after patch")
 	srv.nannyLock.Unlock()
 
 	w.WriteHeader(http.StatusAccepted)
