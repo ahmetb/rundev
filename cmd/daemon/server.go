@@ -72,7 +72,8 @@ func newDaemonServer(opts daemonOpts) http.Handler {
 	mux.HandleFunc("/rundevd/fsz", handlerutil.NewFSDebugHandler(r.opts.syncDir, r.opts.ignores))
 	mux.HandleFunc("/rundevd/debugz", r.statusHandler)
 	mux.HandleFunc("/rundevd/procz", r.logsHandler)
-	mux.HandleFunc("/rundevd/restart", r.restart)
+	mux.HandleFunc("/rundevd/restart", r.restartHandler)
+	mux.HandleFunc("/rundevd/kill", r.killHandler)
 	mux.HandleFunc("/rundevd/patch", withClientSecretAuth(opts.clientSecret, r.patch))
 	mux.HandleFunc("/rundevd/", handlerutil.NewUnsupportedDebugEndpointHandler())
 	mux.HandleFunc("/", r.reverseProxyHandler)
@@ -171,42 +172,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		writeProcError(w, fmt.Sprintf("child process did not start listening on $PORT (%d) in %v", srv.opts.childPort, srv.opts.portWaitTimeout), srv.procLogs.Bytes())
 		return
 	}
-	log.Printf("app port ready")
 	srv.reverseProxy.ServeHTTP(w, req)
-}
-
-func (srv *daemonServer) restart(w http.ResponseWriter, req *http.Request) {
-	if err := srv.procNanny.Restart(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "error restarting process: %+v", err)
-		return
-	}
-	fmt.Fprintf(w, "ok")
-}
-
-func (srv *daemonServer) logsHandler(w http.ResponseWriter, req *http.Request) {
-	srv.nannyLock.Lock()
-	defer srv.nannyLock.Unlock()
-	b := srv.procLogs.Bytes()
-	w.Write(b)
-}
-
-func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request) {
-	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Errorf("failed to fetch local filesystem: %+v", err)
-	}
-	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
-	fmt.Fprintf(w, "pid: %d\n", os.Getpid())
-	wd, _ := os.Getwd()
-	fmt.Fprintf(w, "cwd: %s\n", wd)
-	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
-	fmt.Fprint(w, "opts:\n")
-	fmt.Fprintf(w, "  ignores: %# v\n", pretty.Formatter(srv.opts.ignores))
-	fmt.Fprintf(w, "  run-cmd: %# v\n", pretty.Formatter(srv.opts.runCmd))
-	fmt.Fprintf(w, "  build-cmds: %# v\n", pretty.Formatter(srv.opts.buildCmds))
-	fmt.Fprintf(w, "  port wait timeout: %# v\n", pretty.Formatter(srv.opts.portWaitTimeout))
 }
 
 func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
@@ -274,6 +240,49 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
+func (srv *daemonServer) restartHandler(w http.ResponseWriter, req *http.Request) {
+	srv.nannyLock.Lock()
+	defer srv.nannyLock.Unlock()
+
+	if err := srv.procNanny.Restart(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "error restarting process: %+v", err)
+		return
+	}
+	fmt.Fprintf(w, "ok")
+}
+
+func (srv *daemonServer) killHandler(w http.ResponseWriter, req *http.Request) {
+	srv.nannyLock.Lock()
+	defer srv.nannyLock.Unlock()
+	srv.procNanny.Kill()
+}
+
+func (srv *daemonServer) logsHandler(w http.ResponseWriter, req *http.Request) {
+	srv.nannyLock.Lock()
+	defer srv.nannyLock.Unlock()
+	b := srv.procLogs.Bytes()
+	w.Write(b)
+}
+
+func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request) {
+	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Errorf("failed to fetch local filesystem: %+v", err)
+	}
+	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
+	fmt.Fprintf(w, "pid: %d\n", os.Getpid())
+	wd, _ := os.Getwd()
+	fmt.Fprintf(w, "cwd: %s\n", wd)
+	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
+	fmt.Fprint(w, "opts:\n")
+	fmt.Fprintf(w, "  ignores: %# v\n", pretty.Formatter(srv.opts.ignores))
+	fmt.Fprintf(w, "  run-cmd: %# v\n", pretty.Formatter(srv.opts.runCmd))
+	fmt.Fprintf(w, "  build-cmds: %# v\n", pretty.Formatter(srv.opts.buildCmds))
+	fmt.Fprintf(w, "  port wait timeout: %# v\n", pretty.Formatter(srv.opts.portWaitTimeout))
+}
+
 func writeProcError(w http.ResponseWriter, msg string, logs []byte) {
 	w.Header().Set("Content-Type", constants.MimeProcessError)
 	w.WriteHeader(http.StatusInternalServerError)
@@ -312,7 +321,6 @@ type responseRecorder struct {
 
 func (rr *responseRecorder) Header() http.Header         { return rr.rw.Header() }
 func (rr *responseRecorder) Write(b []byte) (int, error) { return rr.rw.Write(b) }
-
 func (rr *responseRecorder) WriteHeader(statusCode int) {
 	rr.statusCode = statusCode
 	rr.rw.WriteHeader(statusCode)

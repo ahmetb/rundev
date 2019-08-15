@@ -65,4 +65,5 @@ Debug endpoints
 /rundevd/fsz   : remote fs tree
 /rundevd/debugz  : debug data for rundevd daemon
 /rundevd/procz   : logs of current process
-/rundevd/restart : restart the command
+/rundevd/restart : restart the user process
+/rundevd/killl   : kill the user process
