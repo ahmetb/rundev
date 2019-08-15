@@ -46,6 +46,7 @@ type daemonOpts struct {
 
 type daemonServer struct {
 	opts         daemonOpts
+	incarnation  string
 	reverseProxy http.Handler
 	portCheck    portChecker
 
@@ -59,9 +60,10 @@ type daemonServer struct {
 func newDaemonServer(opts daemonOpts) http.Handler {
 	logs := new(bytes.Buffer)
 	r := &daemonServer{
-		opts:      opts,
-		procLogs:  logs,
-		portCheck: newTCPPortChecker(opts.childPort),
+		opts:        opts,
+		incarnation: uuid.New().String(),
+		procLogs:    logs,
+		portCheck:   newTCPPortChecker(opts.childPort),
 		procNanny: newProcessNanny(opts.runCmd.cmd, opts.runCmd.args, procOpts{
 			port: opts.childPort,
 			dir:  opts.syncDir,
@@ -158,8 +160,8 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 				writeProcError(w, fmt.Sprintf("executing -build-cmd (%v) failed: %s", bc, err), b)
 				return
 			}
-			log.Print("rebuild succeeded")
 		}
+		log.Print("all -build-cmds succeeded")
 
 		if err := srv.procNanny.Restart(); err != nil {
 			// TODO return structured response for errors
@@ -177,6 +179,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		writeProcError(w, fmt.Sprintf("child process did not start listening on $PORT (%d) in %v", srv.opts.childPort, srv.opts.portWaitTimeout), srv.procLogs.Bytes())
 		return
 	}
+	log.Println("[rev proxy] app port is ready, proxying")
 	srv.reverseProxy.ServeHTTP(w, req)
 }
 
@@ -265,13 +268,13 @@ func (srv *daemonServer) killHandler(w http.ResponseWriter, req *http.Request) {
 			fmt.Fprintf(w, "failed to kill: %+v", err)
 			return
 		}
-		fmt.Fprintf(w,"killed %d", pp)
+		fmt.Fprintf(w, "killed %d", pp)
 		return
 	}
 
 	srv.nannyLock.Lock()
-	defer srv.nannyLock.Unlock()
 	srv.procNanny.Kill()
+	srv.nannyLock.Unlock()
 }
 
 func (srv *daemonServer) logsHandler(w http.ResponseWriter, req *http.Request) {
@@ -295,12 +298,12 @@ func (srv *daemonServer) psHandler(w http.ResponseWriter, req *http.Request) {
 		proc := pids.Procs[pid]
 		pp := fmt.Sprintf("pid=%d [ppid=%d,pgrp=%d] (%c) %s", proc.Stat.Pid, proc.Stat.Ppid, proc.Stat.Pgrp, proc.Stat.State, proc.Name)
 		prefix := strings.Repeat("  ", indent)
-		fmt.Fprintf(out,"%s%s\n", prefix, pp)
+		fmt.Fprintf(out, "%s%s\n", prefix, pp)
 		for _, cid := range pids.Procs[pid].Children {
 			display(out, cid, indent+1)
 		}
 	}
-	display(w,1,0)
+	display(w, 1, 0)
 }
 
 func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request) {
@@ -311,6 +314,7 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
 	fmt.Fprintf(w, "pid: %d\n", os.Getpid())
+	fmt.Fprintf(w, "incarnation: %s\n", srv.incarnation)
 	wd, _ := os.Getwd()
 	fmt.Fprintf(w, "cwd: %s\n", wd)
 	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())

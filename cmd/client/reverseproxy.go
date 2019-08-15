@@ -90,14 +90,14 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 				continue
 			}
 		default:
-			log.Printf("[reverse proxy] request completed on retry=%d path=%s (%s)", retry, req.URL.Path, resp.Header.Get("content-type"))
+			log.Printf("[reverse proxy] request completed on retry=%d path=%s status=%d (%s)", retry, req.URL.Path, resp.StatusCode, resp.Header.Get("content-type"))
 			return resp, nil
 		}
 	}
 
 	return &http.Response{
 		StatusCode: http.StatusInternalServerError,
-		Body:       ioutil.NopCloser(strings.NewReader(fmt.Sprintf("rundev tried %d times syncing code, but it was still getting a checksum mismatch.\n" +
+		Body: ioutil.NopCloser(strings.NewReader(fmt.Sprintf("rundev tried %d times syncing code, but it was still getting a checksum mismatch.\n"+
 			"please report an issue with console logs, /rundev/fsz and /rundevd/fsz responses.", s.maxRetries))),
 	}, nil
 }
