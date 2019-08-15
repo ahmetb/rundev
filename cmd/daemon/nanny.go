@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"github.com/ahmetb/pstree"
 	"github.com/pkg/errors"
 	"io"
 	"log"
@@ -63,18 +62,23 @@ func (p *procNanny) kill() {
 	defer p.mu.Unlock()
 
 	if p.proc != nil {
-		log.Printf("proc kill")
-
+		pid := -p.proc.Pid  // negative value: ID of process group
+		log.Printf("killing pid %d", pid)
 		// TODO using negative PID (pgrp kill) not working on gVisor
-		//err := syscall.Kill(-p.proc.Pid, syscall.SIGKILL) // kill all processes in proc's PGID
-		// TODO until we can get negative PID kills working, kill every process except self and 1
-		ps, _ := pstree.New()
-		for pp := range ps.Procs {
-			if pp != os.Getpid() && pp != 1 {
-				log.Printf("found pid=%d, killing", pp)
-				syscall.Kill(pp, syscall.SIGKILL)
-			}
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+			log.Printf("warning: failed to kill: %v", err)
+		} else {
+			log.Printf("killed pid %d", pid)
 		}
+
+		//// TODO until we can get negative PID kills working, kill every process except self and 1
+		//ps, _ := pstree.New()
+		//for pp := range ps.Procs {
+		//	if pp != os.Getpid() && pp != 1 {
+		//		log.Printf("found pid=%d, killing", pp)
+		//		syscall.Kill(pp, syscall.SIGKILL)
+		//	}
+		//}
 		p.proc.Release()
 		p.proc = nil
 	}
