@@ -36,6 +36,8 @@ const (
 )
 
 func init() {
+	log.SetFlags(log.Lmicroseconds)
+
 	flLocalDir = flag.String("local-dir", ".", "local directory to sync")
 	flRemoteDir = flag.String("remote-dir", "", "remote directory to sync (inside the container), defaults to container's WORKDIR")
 	flAddr = flag.String("addr", "localhost:8080", "network address to start the local proxy server")

@@ -25,6 +25,7 @@ var (
 )
 
 func init() {
+	log.SetFlags(log.Lmicroseconds)
 	listenAddr := "localhost:8080"
 	if p := os.Getenv("PORT"); p != "" {
 		listenAddr = ":" + p
