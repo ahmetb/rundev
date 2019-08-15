@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
+	"syscall"
 )
 
 type nanny interface {
@@ -62,7 +63,7 @@ func (p *procNanny) kill() {
 
 	if p.proc != nil {
 		log.Printf("proc kill")
-		p.proc.Kill()
+		syscall.Kill(-p.proc.Pid, syscall.SIGKILL) // kill all processes in proc's PGID
 		p.proc.Release()
 	}
 	p.active = false
@@ -75,6 +76,8 @@ func (p *procNanny) replace() error {
 	p.kill()
 
 	newProc := exec.Command(p.cmd, p.args...)
+	newProc.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid:true} // create a new GID
 	if p.opts.dir != "" {
 		newProc.Dir = p.opts.dir
 	}
