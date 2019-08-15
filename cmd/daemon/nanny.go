@@ -63,7 +63,10 @@ func (p *procNanny) kill() {
 
 	if p.proc != nil {
 		log.Printf("proc kill")
-		syscall.Kill(-p.proc.Pid, syscall.SIGKILL) // kill all processes in proc's PGID
+		err := syscall.Kill(-p.proc.Pid, syscall.SIGKILL) // kill all processes in proc's PGID
+		if err != nil {
+			log.Printf("warning: kill failed: %+v", err)
+		}
 		p.proc.Release()
 	}
 	p.active = false
@@ -77,7 +80,7 @@ func (p *procNanny) replace() error {
 
 	newProc := exec.Command(p.cmd, p.args...)
 	newProc.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid:true} // create a new GID
+		Setpgid: true} // create a new GID
 	if p.opts.dir != "" {
 		newProc.Dir = p.opts.dir
 	}

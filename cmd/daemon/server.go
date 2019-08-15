@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"github.com/ahmetb/pstree"
 	"github.com/ahmetb/rundev/lib/constants"
 	"github.com/ahmetb/rundev/lib/fsutil"
 	"github.com/ahmetb/rundev/lib/handlerutil"
@@ -20,8 +21,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -72,6 +76,7 @@ func newDaemonServer(opts daemonOpts) http.Handler {
 	mux.HandleFunc("/rundevd/fsz", handlerutil.NewFSDebugHandler(r.opts.syncDir, r.opts.ignores))
 	mux.HandleFunc("/rundevd/debugz", r.statusHandler)
 	mux.HandleFunc("/rundevd/procz", r.logsHandler)
+	mux.HandleFunc("/rundevd/pstree", r.psHandler)
 	mux.HandleFunc("/rundevd/restart", r.restartHandler)
 	mux.HandleFunc("/rundevd/kill", r.killHandler)
 	mux.HandleFunc("/rundevd/patch", withClientSecretAuth(opts.clientSecret, r.patch))
@@ -253,6 +258,17 @@ func (srv *daemonServer) restartHandler(w http.ResponseWriter, req *http.Request
 }
 
 func (srv *daemonServer) killHandler(w http.ResponseWriter, req *http.Request) {
+	if pid := req.URL.Query().Get("pid"); pid != "" {
+		pp, _ := strconv.Atoi(pid)
+		if err := syscall.Kill(pp, syscall.SIGKILL); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "failed to kill: %+v", err)
+			return
+		}
+		fmt.Fprintf(w,"killed %d", pp)
+		return
+	}
+
 	srv.nannyLock.Lock()
 	defer srv.nannyLock.Unlock()
 	srv.procNanny.Kill()
@@ -263,6 +279,28 @@ func (srv *daemonServer) logsHandler(w http.ResponseWriter, req *http.Request) {
 	defer srv.nannyLock.Unlock()
 	b := srv.procLogs.Bytes()
 	w.Write(b)
+}
+
+func (srv *daemonServer) psHandler(w http.ResponseWriter, req *http.Request) {
+	if runtime.GOOS != "linux" {
+		fmt.Fprintf(w, "pstree not available on %q", runtime.GOOS)
+		return
+	}
+	pids, err := pstree.New()
+	if err != nil {
+		fmt.Fprintf(w, "failed to get pstree: %+v", err)
+	}
+	var display func(io.Writer, int, int)
+	display = func(out io.Writer, pid int, indent int) {
+		proc := pids.Procs[pid]
+		pp := fmt.Sprintf("pid=%d [ppid=%d,pgrp=%d] (%c) %s", proc.Stat.Pid, proc.Stat.Ppid, proc.Stat.Pgrp, proc.Stat.State, proc.Name)
+		prefix := strings.Repeat("  ", indent)
+		fmt.Fprintf(out,"%s%s\n", prefix, pp)
+		for _, cid := range pids.Procs[pid].Children {
+			display(out, cid, indent+1)
+		}
+	}
+	display(w,1,0)
 }
 
 func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request) {
