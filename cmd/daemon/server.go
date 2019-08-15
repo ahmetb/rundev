@@ -271,8 +271,8 @@ func (srv *daemonServer) killHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	srv.nannyLock.Lock()
-	pid := srv.procNanny.Kill()
-	fmt.Fprintf(w, "killed %d", pid)
+	srv.procNanny.Kill()
+	fmt.Fprintf(w, "killed child process (if it was running)")
 	srv.nannyLock.Unlock()
 }
 
