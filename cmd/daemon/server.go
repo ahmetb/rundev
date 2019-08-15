@@ -228,7 +228,7 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set(constants.HdrRundevChecksum, localChecksum)
 		return
 	}
-
+	log.Printf("applying patch (%s)", incomingChecksum)
 	defer req.Body.Close()
 	if err := fsutil.ApplyPatch(srv.opts.syncDir, req.Body); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -238,12 +238,11 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 	log.Printf("patch applied, killing process")
 
 	srv.nannyLock.Lock()
-	pid := srv.procNanny.Kill() // restart the process on next proxied request
-	log.Printf("killed pid %d after patch", pid)
+	srv.procNanny.Kill() // restart the process on next proxied request
 	srv.nannyLock.Unlock()
 
 	w.WriteHeader(http.StatusAccepted)
-	log.Printf("patch (%s) accepted", incomingChecksum)
+	log.Printf("completed patch (%s), responding with %d %s", incomingChecksum, http.StatusAccepted, http.StatusText(http.StatusAccepted))
 	return
 }
 
