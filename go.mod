@@ -12,7 +12,6 @@ require (
 	github.com/kr/pretty v0.1.0
 	github.com/moby/buildkit v0.3.3
 	github.com/pkg/errors v0.8.1
-	github.com/ramr/go-reaper v0.2.0
 	google.golang.org/api v0.7.0
 	gotest.tools v2.2.0+incompatible // indirect
 )

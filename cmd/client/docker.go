@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	dumbInitURL = `https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64`
 	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-a4644a6`
 )
 
@@ -174,7 +175,7 @@ func readDockerfile(dir string) ([]byte, error) {
 
 func prepEntrypoint(opts remoteRunOpts) string {
 	rc, _ := json.Marshal(opts.runCmd.List())
-	cmd := []string{"rundevd",
+	cmd := []string{"/bin/rundevd",
 		"-client-secret=" + opts.clientSecret,
 		"-run-cmd", string(rc)}
 
@@ -194,16 +195,17 @@ func prepEntrypoint(opts remoteRunOpts) string {
 		cmd = append(cmd, "-sync-dir="+opts.syncDir)
 	}
 	sw := new(strings.Builder)
+	fmt.Fprintf(sw, "ADD %s /bin/dumb_init\n", dumbInitURL)
 	fmt.Fprintf(sw, "ADD %s /bin/rundevd\n", rundevdURL)
-	fmt.Fprint(sw, "RUN chmod +x /bin/rundevd\n")
-	sw.WriteString("ENTRYPOINT [")
+	fmt.Fprintln(sw, "RUN chmod +x /bin/rundevd /bin/dumb_init")
+	fmt.Fprintln(sw,`ENTRYPOINT ["/bin/dumb_init", "--"]`)
+	fmt.Fprintf(sw,`CMD [`)
 	for i, a := range cmd {
 		fmt.Fprintf(sw, "%q", a)
 		if i != len(cmd)-1 {
-			sw.WriteString(", \\\n\t\t")
+			sw.WriteString(", \\\n\t")
 		}
 	}
 	sw.WriteString(`]`)
-	sw.WriteString("\nCMD []")
 	return sw.String()
 }
