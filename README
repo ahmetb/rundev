@@ -5,14 +5,20 @@ Sub-second inner-loop iterations for containers running on Google Cloud Run.
 Installation
 ------------
 
-For now you need "go" version >1.12 to download the rundev client:
+For now, you can install the latest version at:
 
-     go get github.com/ahmetb/rundev/cmd/client
-     mv ~/go/bin/{client,rundev}
+- macOS: https://storage.googleapis.com/rundev-test/nightly/client/darwin/rundev-latest
+- Linux: https://storage.googleapis.com/rundev-test/nightly/client/linux/rundev-latest
 
-Make sure ~/go/bin is in your PATH. You can verify installation by running:
+Then:
 
-     rundev -h
+    mv rundev-latest rundev
+    chmod +x rundev
+    mv rundev /usr/local/bin
+
+Alternatively you can find the list of nightly releases by running:
+
+    gsutil ls -l gs://rundev-test/nightly/client/
 
 Start developing
 ---------------
