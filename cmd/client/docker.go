@@ -19,7 +19,7 @@ import (
 
 const (
 	dumbInitURL = `https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64`
-	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-a4644a6`
+	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-a8a26df`
 )
 
 var (
