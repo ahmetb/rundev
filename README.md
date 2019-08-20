@@ -7,7 +7,10 @@ It syncs code from your development machine to Cloud Run container instances and
 circumvents the docker image build and Cloud Run re-deployment steps to provide
 rapid feedback loops.
 
-Rundev brings the inner-loop latency to under a second for dynamic languages
+When you’re using Cloud Run, building a docker image, pushing the image,
+redeploying the app, and visiting the URL takes **over a minute**.
+
+Rundev brings the inner-loop latency to **under a second** for dynamic languages
 (like Python, Node.js). For compiled languages (like Go, Java), it shows nearly
 identical (or faster) compilation speeds to your development machine:
 
