@@ -37,13 +37,14 @@ var (
 	flRunCmd     *string
 	flNoCloudRun *bool
 
+	flCloudRunName            *string
 	flCloudRunCluster         *string
 	flCloudRunClusterLocation *string
 	flCloudRunPlatform        *string
 )
 
 const (
-	appName         = `rundev-app`            // TODO(ahmetb) use basename(realpath($CWD)), or allow user to configure
+	appName         = `rundev-app`
 	runRegion       = `us-central1`           // TODO(ahmetb) allow user to configure
 	localRundevdURL = "http://localhost:8888" // TODO(ahmetb) allow user to configure (albeit, just for debugging/dev rundev itself, a.k.a -no-cloudrun)
 	cleanupDeadline = time.Second * 1
@@ -58,7 +59,9 @@ func init() {
 	flBuildCmd = flag.String("build-cmd", "", "(optional) command to re-build code (inside the container) after syncing,"+
 		"inferred from Dockerfile by default (add comment on RUN directives like #rundev")
 	flRunCmd = flag.String("run-cmd", "", "(optional) command to start application (inside the container) after syncing, inferred from Dockerfile by default")
+
 	flNoCloudRun = flag.Bool("no-cloudrun", false, "do not deploy to Cloud Run (you should start rundevd on localhost:8888)")
+	flCloudRunName = flag.String("name", appName, "name of the Cloud Run service")
 	flCloudRunPlatform = flag.String("platform", "managed", "(passthrough to gcloud) managed or gke")
 	flCloudRunCluster = flag.String("cluster", "", "(passthrough to gcloud) required when -platform=gke")
 	flCloudRunClusterLocation = flag.String("cluster-location", "", "(passthrough to gcloud) required when -platform=gke")
@@ -91,7 +94,6 @@ func main() {
 			log.Fatal("-cluster-location is empty, must be supplied when -platform is specified")
 		}
 	}
-
 	var fileIgnores *ignore.FileIgnores
 	var ignoreRules []string
 	if f, err := os.Open(filepath.Join(*flLocalDir, ".dockerignore")); err == nil {
@@ -113,6 +115,9 @@ func main() {
 		rundevdURL = localRundevdURL
 		log.Printf("not deploying to Cloud Run. make sure to start rundevd at %s", rundevdURL)
 	} else {
+		if *flCloudRunName == "" {
+			log.Fatal("-name is empty")
+		}
 		log.Printf("starting one-time \"build & push & deploy\" to Cloud Run")
 		project, err := currentProject(ctx)
 		if err != nil {
@@ -121,7 +126,7 @@ func main() {
 		if project == "" {
 			log.Fatalf("default project not set on gcloud. run: gcloud config set core/project PROJECT_NAME")
 		}
-		imageName := `gcr.io/` + project + `/` + appName
+		imageName := `gcr.io/` + project + `/` + *flCloudRunName
 
 		df, err := readDockerfile(*flLocalDir)
 		if err != nil {
@@ -196,11 +201,11 @@ func main() {
 			region:          runRegion,
 			cluster:         *flCloudRunCluster,
 			clusterLocation: *flCloudRunClusterLocation,
-		}, appName, imageName)
+		}, *flCloudRunName, imageName)
 		if err != nil {
 			log.Fatalf("error deploying to Cloud Run: %+v", err)
 		}
-		defer cleanupCloudRun(appName, project, runRegion, cleanupDeadline)
+		defer cleanupCloudRun(*flCloudRunName, project, runRegion, cleanupDeadline)
 		rundevdURL = appURL
 	}
 	sync := newSyncer(syncOpts{
