@@ -59,10 +59,9 @@ type daemonOpts struct {
 }
 
 type daemonServer struct {
-	opts         daemonOpts
-	incarnation  string
-	reverseProxy http.Handler
-	portCheck    portChecker
+	opts        daemonOpts
+	incarnation string
+	portCheck   portChecker
 
 	procLogs  *bytes.Buffer
 	patchLock sync.RWMutex
@@ -84,9 +83,6 @@ func newDaemonServer(opts daemonOpts) http.Handler {
 			logs: logs,
 		}),
 	}
-	r.reverseProxy = newReverseProxy(&url.URL{
-		Scheme: "http",
-		Host:   "localhost:" + strconv.Itoa(opts.childPort)})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rundevd/fsz", handlerutil.NewFSDebugHandler(r.opts.syncDir, r.opts.ignores))
@@ -194,7 +190,35 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		return
 	}
 	log.Println("[rev proxy] app port is ready, proxying")
-	srv.reverseProxy.ServeHTTP(w, req)
+
+	req.Host = fmt.Sprintf("localhost:%d", srv.opts.childPort)
+
+	reqPath := req.URL.Path
+	if req.URL.RawQuery != "" {
+		reqPath += "?" + req.URL.RawQuery
+	}
+	defer req.Body.Close()
+	preq,err := http.NewRequest(req.Method, fmt.Sprintf("http://localhost:%d"+reqPath, srv.opts.childPort), req.Body)
+	if err != nil {
+		writeProcError(w, fmt.Sprintf("failed to create reverse proxy request in rundevd:\nerror: %+v", err), nil)
+		return
+	}
+	preq.Header = req.Header
+	// reverse proxy manually
+	resp, err := http.DefaultClient.Do(preq)
+	if err != nil {
+		writeProcError(w, fmt.Sprintf("user process failed to while handling the request:\nerror:%+v", err), srv.procLogs.Bytes())
+		return
+	}
+	// copy the response
+	defer resp.Body.Close()
+	for k, vals := range resp.Header {
+		for _, v := range vals {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
