@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/ahmetb/rundev/lib/ignore"
+	"github.com/ahmetb/rundev/lib/types"
 	"log"
 	"net/http"
 	"os"
@@ -83,22 +84,17 @@ func main() {
 	if flRunCmd == "" {
 		log.Fatal("-run-cmd is empty")
 	}
-	var runCmds []string
-	if err := json.Unmarshal([]byte(flRunCmd), &runCmds); err != nil {
+	var runCmd types.Cmd
+	if err := json.Unmarshal([]byte(flRunCmd), &runCmd); err != nil {
 		log.Fatalf("failed to parse -run-cmd: %v", err)
-	} else if len(runCmds) == 0 {
-		log.Fatal("-run-cmd parsed into zero tokens")
+	} else if len(runCmd) == 0 {
+		log.Fatal("-run-cmd was empty (command array parsed into zero elements)")
 	}
-	runCmd := &cmd{runCmds[0], runCmds[1:]}
 
-	var buildCmds []cmd
+	var buildCmds types.BuildCmds
 	if flBuildCmds != "" {
-		var bcs [][]string
-		if err := json.Unmarshal([]byte(flBuildCmds), &bcs); err != nil {
+		if err := json.Unmarshal([]byte(flBuildCmds), &buildCmds); err != nil {
 			log.Fatalf("failed to parse -build-cmds: %s", err)
-		}
-		for _, v := range bcs {
-			buildCmds = append(buildCmds, cmd{v[0], v[1:]})
 		}
 	}
 
@@ -108,7 +104,6 @@ func main() {
 			log.Fatalf("failed to parse -ignore-patterns: %v", err)
 		}
 	}
-
 
 	handler := newDaemonServer(daemonOpts{
 		clientSecret:    flClientSecret,

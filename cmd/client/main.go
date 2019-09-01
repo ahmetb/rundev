@@ -18,6 +18,7 @@ import (
 	"context"
 	"flag"
 	"github.com/ahmetb/rundev/lib/ignore"
+	"github.com/ahmetb/rundev/lib/types"
 	"github.com/google/shlex"
 	"github.com/google/uuid"
 	"log"
@@ -151,7 +152,7 @@ func main() {
 			runCmd = cmd{v[0], v[1:]}
 		}
 
-		var buildCmds []cmd
+		var buildCmds types.BuildCmds
 		if *flBuildCmd == "" {
 			blCmds := parseBuildCmds(d)
 			if len(blCmds) == 0 {
@@ -160,17 +161,24 @@ func main() {
 				log.Printf("[info] discovered build cmds (annotated with #rundev) from dockerfile as -build-cmd:")
 				for _, v := range blCmds {
 					log.Printf("-> %s", v)
-					buildCmds = append(buildCmds, v)
+					buildCmds = append(buildCmds, types.BuildCmd{
+						C:  v.Flatten(),
+						On: nil, // TODO(ahmetb) parse .Pattern
+					})
 				}
 			}
 		} else {
-			v, err := shlex.Split(*flBuildCmd)
+			argv, err := shlex.Split(*flBuildCmd)
 			if err != nil {
 				log.Fatalf("failed to parse -build-cmd into commands and args: %+v", err)
 			}
-			vv := cmd{v[0], v[1:]}
-			log.Printf("[info] parsed -build-cmd as: %s", vv)
-			buildCmds = []cmd{vv}
+			log.Printf("[info] parsed -build-cmd as: %s", argv)
+			buildCmds = []types.BuildCmd{
+				{
+					C:  argv,
+					On: nil,
+				},
+			}
 		}
 
 		ro := remoteRunOpts{

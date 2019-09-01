@@ -12,9 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package constants
+package types
 
 type ProcError struct {
 	Message string `json:"message"`
 	Output  string `json:"output"`
 }
+
+type Cmd []string
+
+func (c Cmd) Command() string {
+	if len(c) == 0 {
+		return ""
+	}
+	return c[0]
+}
+
+func (c Cmd) Args() []string {
+	if len(c) <= 1 {
+		return nil
+	}
+	return c[1:]
+}
+
+type BuildCmd struct {
+	C  Cmd      `json:"c"`
+	On []string `json:"on,omitempty"` // file patterns
+}
+
+type BuildCmds []BuildCmd

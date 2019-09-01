@@ -25,14 +25,13 @@ import (
 	"github.com/ahmetb/rundev/lib/fsutil"
 	"github.com/ahmetb/rundev/lib/handlerutil"
 	"github.com/ahmetb/rundev/lib/ignore"
+	"github.com/ahmetb/rundev/lib/types"
 	"github.com/google/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -51,8 +50,8 @@ type cmd struct {
 type daemonOpts struct {
 	clientSecret    string
 	syncDir         string
-	runCmd          *cmd
-	buildCmds       []cmd
+	runCmd          types.Cmd
+	buildCmds       types.BuildCmds
 	childPort       int
 	ignores         *ignore.FileIgnores
 	portWaitTimeout time.Duration
@@ -77,7 +76,7 @@ func newDaemonServer(opts daemonOpts) http.Handler {
 		incarnation: uuid.New().String(),
 		procLogs:    logs,
 		portCheck:   newTCPPortChecker(opts.childPort),
-		procNanny: newProcessNanny(opts.runCmd.cmd, opts.runCmd.args, procOpts{
+		procNanny: newProcessNanny(opts.runCmd.Command(), opts.runCmd.Args(), procOpts{
 			port: opts.childPort,
 			dir:  opts.syncDir,
 			logs: logs,
@@ -114,11 +113,6 @@ func withClientSecretAuth(secret string, hand http.HandlerFunc) http.HandlerFunc
 		}
 		hand(w, req)
 	}
-}
-
-// newReverseProxy returns a reverse proxy to the user’s app.
-func newReverseProxy(target *url.URL) http.Handler {
-	return httputil.NewSingleHostReverseProxy(target)
 }
 
 func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Request) {
@@ -162,7 +156,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		log.Printf("[rev proxy] user process not running, restarting")
 		for i, bc := range srv.opts.buildCmds {
 			log.Printf("[rev proxy] executing build command (%d/%d): %v", i, len(srv.opts.buildCmds), bc)
-			cmd := exec.Command(bc.cmd, bc.args...)
+			cmd := exec.Command(bc.C.Command(), bc.C.Args()...)
 			cmd.Dir = srv.opts.syncDir
 			if b, err := cmd.CombinedOutput(); err != nil {
 				srv.nannyLock.Unlock()
@@ -198,7 +192,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		reqPath += "?" + req.URL.RawQuery
 	}
 	defer req.Body.Close()
-	preq,err := http.NewRequest(req.Method, fmt.Sprintf("http://localhost:%d"+reqPath, srv.opts.childPort), req.Body)
+	preq, err := http.NewRequest(req.Method, fmt.Sprintf("http://localhost:%d"+reqPath, srv.opts.childPort), req.Body)
 	if err != nil {
 		writeProcError(w, fmt.Sprintf("failed to create reverse proxy request in rundevd:\nerror: %+v", err), nil)
 		return
@@ -218,7 +212,7 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	_, _ = io.Copy(w, resp.Body)
 }
 
 func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
@@ -252,7 +246,7 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Errorf("failed to fetch local filesystem: %+v", err)
+		fmt.Fprintf(w, "failed to fetch local filesystem: %+v", err)
 		return
 	}
 	localChecksum := fmt.Sprintf("%d", fs.RootChecksum())
@@ -318,7 +312,7 @@ func (srv *daemonServer) logsHandler(w http.ResponseWriter, req *http.Request) {
 	srv.nannyLock.Lock()
 	defer srv.nannyLock.Unlock()
 	b := srv.procLogs.Bytes()
-	w.Write(b)
+	_, _ = w.Write(b)
 }
 
 func (srv *daemonServer) psHandler(w http.ResponseWriter, req *http.Request) {
@@ -347,7 +341,8 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 	fs, err := fsutil.Walk(srv.opts.syncDir, srv.opts.ignores)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Errorf("failed to fetch local filesystem: %+v", err)
+		fmt.Fprintf(w, "failed to fetch local filesystem: %+v", err)
+		return
 	}
 	fmt.Fprintf(w, "fs checksum: %v\n", fs.RootChecksum())
 	fmt.Fprintf(w, "pid: %d\n", os.Getpid())
@@ -365,7 +360,7 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 func writeProcError(w http.ResponseWriter, msg string, logs []byte) {
 	w.Header().Set("Content-Type", constants.MimeProcessError)
 	w.WriteHeader(http.StatusInternalServerError)
-	resp := constants.ProcError{
+	resp := types.ProcError{
 		Message: msg,
 		Output:  string(logs),
 	}
@@ -390,7 +385,7 @@ func writeChecksumMismatchResp(w http.ResponseWriter, fs fsutil.FSNode) {
 	if err := json.NewEncoder(&b).Encode(fs); err != nil {
 		log.Printf("WARNING: %+v", errors.Wrap(err, "error while marshaling remote fs"))
 	}
-	io.Copy(w, &b)
+	_, _ = io.Copy(w, &b)
 }
 
 type responseRecorder struct {

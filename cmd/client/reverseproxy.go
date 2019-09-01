@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ahmetb/rundev/lib/constants"
+	"github.com/ahmetb/rundev/lib/types"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
@@ -82,7 +83,7 @@ func (s *syncingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		switch ct {
 		case constants.MimeProcessError:
 			log.Printf("[reverse proxy] remote responded with process error")
-			var pe constants.ProcError
+			var pe types.ProcError
 			if err := json.NewDecoder(resp.Body).Decode(&pe); err != nil {
 				if resp.Body != nil {
 					resp.Body.Close()

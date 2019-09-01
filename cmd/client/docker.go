@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ahmetb/rundev/lib/types"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"io/ioutil"
 	"os"
@@ -33,7 +34,7 @@ import (
 
 const (
 	dumbInitURL = `https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64`
-	rundevdURL = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-919089f`
+	rundevdURL  = `https://storage.googleapis.com/rundev-test/rundevd-v0.0.0-919089f`
 )
 
 var (
@@ -43,7 +44,7 @@ var (
 type remoteRunOpts struct {
 	syncDir      string
 	runCmd       cmd
-	buildCmds    []cmd
+	buildCmds    types.BuildCmds
 	clientSecret string
 	ignoreRules  []string
 }
@@ -67,7 +68,7 @@ func (c cmd) String() string {
 	return s
 }
 
-func (c cmd) List() []string {
+func (c cmd) Flatten() []string {
 	if c.cmd == "" {
 		return nil
 	}
@@ -188,17 +189,13 @@ func readDockerfile(dir string) ([]byte, error) {
 }
 
 func prepEntrypoint(opts remoteRunOpts) string {
-	rc, _ := json.Marshal(opts.runCmd.List())
+	rc, _ := json.Marshal(opts.runCmd)
 	cmd := []string{"/bin/rundevd",
 		"-client-secret=" + opts.clientSecret,
 		"-run-cmd", string(rc)}
 
 	if len(opts.buildCmds) > 0 {
-		bcs := make([][]string, len(opts.buildCmds))
-		for i, v := range opts.buildCmds {
-			bcs[i] = v.List()
-		}
-		bc, _ := json.Marshal(bcs)
+		bc, _ := json.Marshal(opts.buildCmds)
 		cmd = append(cmd, "-build-cmds", string(bc))
 	}
 	if len(opts.ignoreRules) > 0 {
@@ -212,8 +209,8 @@ func prepEntrypoint(opts remoteRunOpts) string {
 	fmt.Fprintf(sw, "ADD %s /bin/dumb_init\n", dumbInitURL)
 	fmt.Fprintf(sw, "ADD %s /bin/rundevd\n", rundevdURL)
 	fmt.Fprintln(sw, "RUN chmod +x /bin/rundevd /bin/dumb_init")
-	fmt.Fprintln(sw,`ENTRYPOINT ["/bin/dumb_init", "--"]`)
-	fmt.Fprintf(sw,`CMD [`)
+	fmt.Fprintln(sw, `ENTRYPOINT ["/bin/dumb_init", "--"]`)
+	fmt.Fprintf(sw, `CMD [`)
 	for i, a := range cmd {
 		fmt.Fprintf(sw, "%q", a)
 		if i != len(cmd)-1 {
