@@ -176,6 +176,18 @@ RUN ["uname","-a"] #rundev`,
 				{"/bin/sh", []string{"-c", "xyz"}},
 				{"uname", []string{"-a"}}},
 		},
+		{
+			name: "multi-line run cmd annotated",
+			df: `FROM scratch
+RUN apt-get -qqy install \
+	git \
+	libuv \
+	psmisc #rundev`,
+			want: []cmd{
+				{cmd: "/bin/sh", args: []string{"-c", "apt-get -qqy install \tgit \tlibuv " +
+					"\tpsmisc"}},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
