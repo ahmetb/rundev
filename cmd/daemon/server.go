@@ -26,6 +26,7 @@ import (
 	"github.com/ahmetb/rundev/lib/handlerutil"
 	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/ahmetb/rundev/lib/types"
+	"github.com/bmatcuk/doublestar"
 	"github.com/google/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -62,8 +63,9 @@ type daemonServer struct {
 	incarnation string
 	portCheck   portChecker
 
-	procLogs  *bytes.Buffer
-	patchLock sync.RWMutex
+	procLogs         *bytes.Buffer
+	patchLock        sync.RWMutex
+	lastUpdatedFiles []string
 
 	nannyLock sync.Mutex
 	procNanny nanny
@@ -154,18 +156,26 @@ func (srv *daemonServer) reverseProxyHandler(w http.ResponseWriter, req *http.Re
 	srv.nannyLock.Lock()
 	if !srv.procNanny.Running() {
 		log.Printf("[rev proxy] user process not running, restarting")
+		executed := 0
 		for i, bc := range srv.opts.buildCmds {
-			log.Printf("[rev proxy] executing build command (%d/%d): %v", i, len(srv.opts.buildCmds), bc)
+			log.Printf("[build] build cmd (%d of %d): %v", i, len(srv.opts.buildCmds), bc)
+			if len(bc.On) > 0 && !matches(srv.lastUpdatedFiles, bc.On) {
+				log.Println("[build] updates files don't match, skip")
+				continue
+			}
+
+			log.Println("[build] executing build command")
 			cmd := exec.Command(bc.C.Command(), bc.C.Args()...)
 			cmd.Dir = srv.opts.syncDir
 			if b, err := cmd.CombinedOutput(); err != nil {
 				srv.nannyLock.Unlock()
-				log.Printf("build cmd failure: %s", string(b))
+				log.Printf("[build] build cmd failure: %s", string(b))
 				writeProcError(w, fmt.Sprintf("executing -build-cmd (%v) failed: %s", bc, err), b)
 				return
 			}
+			executed++
 		}
-		log.Print("all -build-cmds succeeded")
+		log.Printf("executed %d of %d build cmds", executed, len(srv.opts.buildCmds))
 
 		if err := srv.procNanny.Restart(); err != nil {
 			// TODO return structured response for errors
@@ -262,11 +272,14 @@ func (srv *daemonServer) patch(w http.ResponseWriter, req *http.Request) {
 	}
 	log.Printf("applying patch (%s)", incomingChecksum)
 	defer req.Body.Close()
-	if err := fsutil.ApplyPatch(srv.opts.syncDir, req.Body); err != nil {
+	updated, err := fsutil.ApplyPatch(srv.opts.syncDir, req.Body)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "failed to uncompress patch tar: %+v", err)
 		return
 	}
+	srv.lastUpdatedFiles = updated
+
 	log.Printf("patch applied, killing process")
 
 	srv.nannyLock.Lock()
@@ -352,9 +365,12 @@ func (srv *daemonServer) statusHandler(w http.ResponseWriter, req *http.Request)
 	fmt.Fprintf(w, "child process running: %v\n", srv.procNanny.Running())
 	fmt.Fprint(w, "opts:\n")
 	fmt.Fprintf(w, "  ignores: %# v\n", pretty.Formatter(srv.opts.ignores))
-	fmt.Fprintf(w, "  run-cmd: %# v\n", pretty.Formatter(srv.opts.runCmd))
-	fmt.Fprintf(w, "  build-cmds: %# v\n", pretty.Formatter(srv.opts.buildCmds))
 	fmt.Fprintf(w, "  port wait timeout: %# v\n", pretty.Formatter(srv.opts.portWaitTimeout))
+	fmt.Fprintf(w, "  run-cmd: %# v\n", pretty.Formatter(srv.opts.runCmd))
+	fmt.Fprintln(w, "  build-cmds:")
+	for _, v := range srv.opts.buildCmds {
+		fmt.Fprintf(w, "  -> %s (on: %s)\n", pretty.Formatter(v.C), pretty.Formatter(v.On))
+	}
 }
 
 func writeProcError(w http.ResponseWriter, msg string, logs []byte) {
@@ -386,6 +402,18 @@ func writeChecksumMismatchResp(w http.ResponseWriter, fs fsutil.FSNode) {
 		log.Printf("WARNING: %+v", errors.Wrap(err, "error while marshaling remote fs"))
 	}
 	_, _ = io.Copy(w, &b)
+}
+
+// matches checks any of the files match any of the patterns
+func matches(files, patterns []string) bool {
+	for _, f := range files {
+		for _, p := range patterns {
+			if ok, _ := doublestar.Match(p, f); ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type responseRecorder struct {

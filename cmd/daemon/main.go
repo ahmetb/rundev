@@ -84,6 +84,7 @@ func main() {
 	if flRunCmd == "" {
 		log.Fatal("-run-cmd is empty")
 	}
+
 	var runCmd types.Cmd
 	if err := json.Unmarshal([]byte(flRunCmd), &runCmd); err != nil {
 		log.Fatalf("failed to parse -run-cmd: %v", err)

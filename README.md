@@ -79,11 +79,18 @@ annotate the `RUN` directives in the Dockerfile with `# rundev` comments:
 
 ```sh
 RUN go build -o /out/server . # rundev
-# OR:
 RUN npm install --production  # rundev
 ```
 
-After you see a line like following:
+You can use `#rundev` comment to run commands only when some files are updated:
+
+```sh
+RUN go build -o /out/server .        # rundev[**/**.go, go.*]
+RUN pip install -r requirements.txt  # rundev[requirements.txt]
+```
+
+After `rundev` command deploys an app to Cloud Run for development, you see a
+log line as follows:
 
 ```text
 local proxy server starting at http://localhost:8080 (proxying to https://...

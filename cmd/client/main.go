@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/ahmetb/rundev/lib/dockerfile"
 	"github.com/ahmetb/rundev/lib/ignore"
 	"github.com/ahmetb/rundev/lib/types"
 	"github.com/google/shlex"
@@ -133,13 +134,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		d, err := parseDockerfile(df)
+		d, err := dockerfile.ParseDockerfile(df)
 		if err != nil {
 			log.Fatalf("failed to parse Dockerfile: %+v", err)
 		}
-		var runCmd cmd
+		var runCmd dockerfile.Cmd
 		if *flRunCmd == "" {
-			runCmd, err = parseEntrypoint(d)
+			runCmd, err = dockerfile.ParseEntrypoint(d)
 			if err != nil {
 				log.Fatalf("failed to parse entrypoint/cmd from dockerfile. try specifying -run-cmd? error: %+v", err)
 			}
@@ -149,23 +150,16 @@ func main() {
 			if err != nil {
 				log.Fatalf("failed to parse -run-cmd into commands and args: %+v", err)
 			}
-			runCmd = cmd{v[0], v[1:]}
+			runCmd = dockerfile.Cmd{v[0], v[1:]}
 		}
 
 		var buildCmds types.BuildCmds
 		if *flBuildCmd == "" {
-			blCmds := parseBuildCmds(d)
-			if len(blCmds) == 0 {
+			v := dockerfile.ParseBuildCmds(d)
+			if len(v) == 0 {
 				log.Printf("[info] -build-cmd not specified: if you have steps to build your code after syncing, use this flag, or add #rundev comment to RUN statements in your Dockerfile")
 			} else {
-				log.Printf("[info] discovered build cmds (annotated with #rundev) from dockerfile as -build-cmd:")
-				for _, v := range blCmds {
-					log.Printf("-> %s", v)
-					buildCmds = append(buildCmds, types.BuildCmd{
-						C:  v.Flatten(),
-						On: nil, // TODO(ahmetb) parse .Pattern
-					})
-				}
+				buildCmds = v
 			}
 		} else {
 			argv, err := shlex.Split(*flBuildCmd)
@@ -183,7 +177,7 @@ func main() {
 
 		ro := remoteRunOpts{
 			syncDir:      *flRemoteDir,
-			runCmd:       runCmd,
+			runCmd:       runCmd.Flatten(),
 			buildCmds:    buildCmds,
 			clientSecret: clientSecret,
 			ignoreRules:  ignoreRules, // TODO(ahmetb) use this
@@ -236,7 +230,7 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		log.Println("shutting down server")
-		localServer.Shutdown(ctx) // TODO(ahmetb) maybe use .Close?
+		_ = localServer.Shutdown(ctx) // TODO(ahmetb) maybe use .Close?
 	}()
 	log.Printf("local proxy server starting at http://%s (proxying to %s)", *flAddr, rundevdURL)
 	if err := localServer.ListenAndServe(); err != nil {
